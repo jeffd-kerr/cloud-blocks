@@ -881,18 +881,18 @@ function updateScoreDisplay() {
 }
 
 // Calculate drop interval based on lines cleared
-// Every 5 lines: speed increases by 20% (multiply by 0.8)
-// At 40 lines: speed is capped (0.8^8 ≈ 0.168, so ~5.95x faster)
+// Every 5 lines: speed increases by 25% (multiply by 0.75)
+// At 40 lines: speed is capped (0.75^8 ≈ 0.100, so ~10x faster)
 // After that, speed stays constant
 function updateDropInterval() {
     if (lines >= 40) {
         // Speed stays at level 8 (40 lines reached)
-        dropInterval = 800 * Math.pow(0.8, 8);  // ≈ 134ms (5.95x faster)
+        dropInterval = 800 * Math.pow(0.75, 8);  // ≈ 80ms (10x faster)
     } else {
         // Calculate which step we're on (0-7)
         const step = Math.floor(lines / 5);
-        // Each step multiplies speed by 0.8 (20% faster)
-        dropInterval = 800 * Math.pow(0.8, step);
+        // Each step multiplies speed by 0.75 (25% faster)
+        dropInterval = 800 * Math.pow(0.75, step);
     }
 }
 
