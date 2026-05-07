@@ -742,7 +742,8 @@ function rotateBlocks(blocks, clockwise) {
 function tryRotate(clockwise) {
     if (!cur) return;
     const newBlocks = rotateBlocks(cur.blocks, clockwise);
-    const kicks = [[0,0],[-1,0],[1,0],[0,-1],[0,1],[-2,0],[2,0]];
+    // Extended wall kicks for wider pieces like I-tetromino
+    const kicks = [[0,0],[-1,0],[1,0],[0,-1],[0,1],[-2,0],[2,0],[-3,0],[3,0],[0,-2],[0,2]];
     for (const [dc, dr] of kicks) {
         const test = { ...cur, blocks: newBlocks, cx: cur.cx + dc, cy: cur.cy + dr };
         if (!collides(absBlocks(test))) {
