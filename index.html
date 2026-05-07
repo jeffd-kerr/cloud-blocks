@@ -327,7 +327,7 @@
             <p>📱 <strong>Touch Controls:</strong></p>
             <p>Use the on-screen buttons to move, rotate, and drop!</p>
         </div>
-        <button onclick="startGame()">Start Game</button>
+        <button onclick="ensureAudio(); startGame()">Start Game</button>
     </div>
 </div>
 
@@ -337,7 +337,7 @@
     <p>The clouds have filled the sky!</p>
     <div class="final-score" id="finalScore">0</div>
     <p>Lines Cleared: <span id="finalLines">0</span></p>
-    <button onclick="startGame()">Play Again</button>
+    <button onclick="ensureAudio(); startGame()">Play Again</button>
 </div>
 
 <!-- Main Game -->
