@@ -578,6 +578,46 @@ function sfxGameOver() {
     noiseSrc.start(t + 0.1); noiseSrc.stop(t + 1.3);
 }
 
+// Gentle rising chime when blocks settle upward through gaps
+function sfxSettle() {
+    ensureAudio();
+    const t = audioCtx.currentTime;
+
+    // Quick ascending two-note chime: F5 → A5
+    const notes = [698, 880];
+    for (let i = 0; i < notes.length; i++) {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        const start = t + i * 0.08;
+        osc.frequency.setValueAtTime(notes[i], start);
+        gain.gain.setValueAtTime(0.09, start);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.2);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start(start); osc.stop(start + 0.2);
+    }
+
+    // Soft breathy whoosh underneath
+    const bufLen = audioCtx.sampleRate * 0.15;
+    const buf = audioCtx.createBuffer(1, bufLen, audioCtx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufLen; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.sin(i / bufLen * Math.PI) * 0.08;
+    }
+    const noise = audioCtx.createBufferSource();
+    const nGain = audioCtx.createGain();
+    const nFilter = audioCtx.createBiquadFilter();
+    noise.buffer = buf;
+    nFilter.type = 'bandpass';
+    nFilter.frequency.setValueAtTime(1500, t);
+    nFilter.frequency.exponentialRampToValueAtTime(3000, t + 0.12);
+    nFilter.Q.value = 1;
+    nGain.gain.setValueAtTime(0.05, t);
+    nGain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+    noise.connect(nFilter).connect(nGain).connect(audioCtx.destination);
+    noise.start(); noise.stop(t + 0.15);
+}
+
 // Whoosh for hard drop
 function sfxWhoosh() {
     ensureAudio();
@@ -823,12 +863,119 @@ function clearLines() {
         level = 1 + Math.floor(lines / 10);
         dropInterval = Math.max(100, 800 - (level - 1) * 60);
 
-        document.getElementById('score').textContent = score;
-        document.getElementById('lines').textContent = lines;
-        document.getElementById('level').textContent = level;
-
+        updateScoreDisplay();
         rowFlash = null;
+
+        // Apply upward gravity — blocks settle up through empty gaps
+        applyGravity();
+    }, 350);
+}
+
+function updateScoreDisplay() {
+    document.getElementById('score').textContent = score;
+    document.getElementById('lines').textContent = lines;
+    document.getElementById('level').textContent = level;
+}
+
+// Upward gravity: in Cloud Tetris, blocks float UP.
+// After a row is cleared, scan each column from top to bottom.
+// If there's an empty cell with a block below it, float the block up.
+function applyGravity() {
+    let moved = false;
+
+    // Scan each column independently
+    for (let c = 0; c < COLS; c++) {
+        // Walk upward from row 0 (top). Pull blocks up to fill gaps.
+        // Find first empty cell scanning from top, then find next block below it.
+        let writeRow = -1; // next row to write a block into (going down)
+
+        // Find the topmost empty row in this column that has a block somewhere below
+        for (let r = 0; r < ROWS; r++) {
+            if (board[r][c] === 0) {
+                if (writeRow === -1) writeRow = r;
+            } else if (writeRow !== -1) {
+                // Found a block below an empty space — float it up
+                board[writeRow][c] = board[r][c];
+                board[r][c] = 0;
+                moved = true;
+                writeRow++; // next empty slot
+            }
+        }
+    }
+
+    if (moved) {
+        sfxSettle();
+
+        // Check for chain clears after a short delay
+        setTimeout(() => {
+            chainClear();
+        }, 300);
+    } else {
         animating = false;
+    }
+}
+
+// Chain clear: check if gravity created new full rows
+function chainClear() {
+    let fullRows = [];
+    for (let r = 0; r < ROWS; r++) {
+        if (board[r].every(c => c !== 0)) {
+            fullRows.push(r);
+        }
+    }
+
+    if (fullRows.length === 0) {
+        animating = false;
+        return;
+    }
+
+    // Pop animation for chain clears
+    for (const r of fullRows) {
+        for (let c = 0; c < COLS; c++) {
+            const color = board[r][c];
+            const bx = c * CELL + CELL / 2;
+            const by = r * CELL + CELL / 2;
+
+            for (let i = 0; i < 6; i++) {
+                const angle = (Math.PI * 2 / 6) * i + Math.random() * 0.5;
+                const speed = 1.5 + Math.random() * 3;
+                popParticles.push({
+                    x: bx, y: by,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed - 1.5,
+                    color: color,
+                    radius: 2 + Math.random() * 3,
+                    t: 0,
+                    duration: 400 + Math.random() * 200,
+                    opacity: 1
+                });
+            }
+        }
+    }
+
+    rowFlash = { rows: fullRows, t: 0, duration: 250 };
+    sfxPop(fullRows.length);
+
+    setTimeout(() => {
+        fullRows.sort((a, b) => b - a);
+        for (const r of fullRows) {
+            board.splice(r, 1);
+            board.push(Array(COLS).fill(0));
+        }
+
+        // Chain bonus: 1.5x score for chain clears
+        const cleared = fullRows.length;
+        const bonus = [0, 100, 300, 500, 800];
+        score += Math.floor((bonus[cleared] || 1000) * level * 1.5);
+        lines += cleared;
+        level = 1 + Math.floor(lines / 10);
+        dropInterval = Math.max(100, 800 - (level - 1) * 60);
+
+        updateScoreDisplay();
+        rowFlash = null;
+
+        // Recurse — gravity might cause more chains
+        applyGravity();
     }, 350);
 }
 
