@@ -341,9 +341,10 @@
                 <p style="margin: 5px 0;"><span class="key">2</span> Medium</p>
                 <p style="margin: 5px 0;"><span class="key">3</span> Hard</p>
             </div>
-            <div class="mobile-hint" style="display:none; margin-top: 15px; padding: 12px; background: rgba(0,255,136,0.15); border-radius: 8px; border: 1px solid rgba(0,255,136,0.3);">
-                <p>📱 <strong>Swipe Controls:</strong></p>
-                <p>Swipe left/right to move, up to drop, down to rotate</p>
+            <div class="mobile-hint" style="display:none; margin-top: 15px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                <button onclick="ensureAudio(); setDifficultyAndStart(0.85)" style="padding: 10px 20px; font-size: 0.9em; margin: 0; background: linear-gradient(135deg, #00ff88, #00d4ff); border: none; color: #000; font-weight: bold; border-radius: 8px; cursor: pointer;">Easy</button>
+                <button onclick="ensureAudio(); setDifficultyAndStart(0.75)" style="padding: 10px 20px; font-size: 0.9em; margin: 0; background: linear-gradient(135deg, #00ff88, #00d4ff); border: none; color: #000; font-weight: bold; border-radius: 8px; cursor: pointer;">Medium</button>
+                <button onclick="ensureAudio(); setDifficultyAndStart(0.65)" style="padding: 10px 20px; font-size: 0.9em; margin: 0; background: linear-gradient(135deg, #00ff88, #00d4ff); border: none; color: #000; font-weight: bold; border-radius: 8px; cursor: pointer;">Hard</button>
             </div>
         </div>
     </div>
