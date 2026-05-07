@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Cloud Tetris</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -15,6 +15,10 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             font-family: 'Arial', sans-serif;
             color: #fff;
+            touch-action: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
 
         .container {
@@ -124,6 +128,105 @@
 
         .control-item { margin: 5px 0; }
 
+        /* ── Mobile touch controls ──────────────────── */
+        .touch-controls {
+            display: none;
+            width: 100%;
+            max-width: 320px;
+            margin: 12px auto 0;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .touch-row {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .touch-btn {
+            width: 70px;
+            height: 56px;
+            border: 2px solid rgba(0, 212, 255, 0.5);
+            background: rgba(0, 0, 0, 0.4);
+            color: #fff;
+            font-size: 1.5em;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            transition: background 0.1s, transform 0.1s;
+        }
+
+        .touch-btn:active {
+            background: rgba(0, 212, 255, 0.35);
+            transform: scale(0.92);
+        }
+
+        .touch-btn.wide {
+            width: 150px;
+            font-size: 1.1em;
+            letter-spacing: 2px;
+        }
+
+        /* ── Responsive / mobile ────────────────────── */
+        @media (max-width: 700px) {
+            body { align-items: flex-start; overflow-y: auto; }
+
+            .container {
+                padding: 10px;
+                border-radius: 0;
+                width: 100%;
+                min-height: 100vh;
+            }
+
+            h1 { font-size: 1.6em; margin-bottom: 4px; }
+            .subtitle { font-size: 0.85em; margin-bottom: 8px; }
+
+            .game-wrapper {
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+                margin-top: 8px;
+            }
+
+            #gameCanvas {
+                width: min(300px, 85vw);
+                height: auto;
+                aspect-ratio: 1 / 2;
+            }
+
+            .stats-panel {
+                flex-direction: row;
+                flex-wrap: wrap;
+                justify-content: center;
+                min-width: unset;
+                width: 100%;
+                max-width: 340px;
+                gap: 8px;
+                padding: 10px;
+            }
+
+            .stat-box { padding: 8px 12px; flex: 1; min-width: 80px; }
+            .stat-value { font-size: 1.3em; }
+            .preview-box { padding: 8px; }
+            #previewCanvas { width: 70px; height: 70px; }
+            .controls { display: none; }
+            .touch-controls { display: flex; }
+
+            .title-screen { padding: 20px; overflow-y: auto; }
+            .title-screen h1 { font-size: 2.2em; }
+            .instructions { max-width: 90vw; padding: 20px; font-size: 0.9em; }
+            .desktop-controls { display: none; }
+            .mobile-hint { display: block !important; }
+        }
+
+        @media (min-width: 701px) {
+            .mobile-hint { display: none !important; }
+        }
+
         button {
             margin-top: 20px;
             padding: 12px 30px;
@@ -214,10 +317,16 @@
         <h3>How to Play</h3>
         <p>Pieces float <strong>UPWARD</strong> from the bottom! Create complete horizontal lines before the board fills up.</p>
         <h3>Controls</h3>
-        <p><span class="key">← →</span> Move piece left / right</p>
-        <p><span class="key">↑</span> or <span class="key">Z</span> Rotate clockwise</p>
-        <p><span class="key">↓</span> or <span class="key">X</span> Rotate counter-clockwise</p>
-        <p><span class="key">SPACE</span> Instant drop upward</p>
+        <div class="desktop-controls">
+            <p><span class="key">← →</span> Move piece left / right</p>
+            <p><span class="key">↑</span> or <span class="key">Z</span> Rotate clockwise</p>
+            <p><span class="key">↓</span> or <span class="key">X</span> Rotate counter-clockwise</p>
+            <p><span class="key">SPACE</span> Instant drop upward</p>
+        </div>
+        <div class="mobile-hint" style="display:none; margin-top:15px; padding:12px; background:rgba(0,255,136,0.15); border-radius:8px; border:1px solid rgba(0,255,136,0.3);">
+            <p>📱 <strong>Touch Controls:</strong></p>
+            <p>Use the on-screen buttons to move, rotate, and drop!</p>
+        </div>
         <button onclick="startGame()">Start Game</button>
     </div>
 </div>
@@ -260,6 +369,20 @@
                 <div class="control-item">↓ / X  Rotate CCW</div>
                 <div class="control-item">SPACE  Drop Up</div>
             </div>
+        </div>
+    </div>
+
+    <!-- Mobile touch controls -->
+    <div class="touch-controls" id="touchControls">
+        <div class="touch-row">
+            <div class="touch-btn" id="btnRotCCW">↺</div>
+            <div class="touch-btn wide" id="btnDrop">⬆ DROP</div>
+            <div class="touch-btn" id="btnRotCW">↻</div>
+        </div>
+        <div class="touch-row">
+            <div class="touch-btn" id="btnLeft">◀</div>
+            <div class="touch-btn" style="width:150px; visibility:hidden;"></div>
+            <div class="touch-btn" id="btnRight">▶</div>
         </div>
     </div>
 </div>
@@ -943,7 +1066,7 @@ function updateAnimations(dt) {
     }
 }
 
-// ── Controls ───────────────────────────────────────────────
+// ── Keyboard Controls ────────────────────────────────────────
 document.addEventListener('keydown', (e) => {
     if (!running || over || !cur) return;
 
@@ -961,6 +1084,110 @@ document.addEventListener('keydown', (e) => {
     }
     draw();
 });
+
+// ── Touch Button Controls ───────────────────────────────────
+function touchAction(action) {
+    if (!running || over || !cur) return;
+    ensureAudio();
+    switch (action) {
+        case 'left':      moveH(-1); break;
+        case 'right':     moveH(1); break;
+        case 'rotateCW':  tryRotate(true); break;
+        case 'rotateCCW': tryRotate(false); break;
+        case 'drop':      if (!animating) hardDrop(); break;
+    }
+    draw();
+}
+
+function setupTouchButtons() {
+    const map = {
+        btnLeft: 'left', btnRight: 'right',
+        btnRotCW: 'rotateCW', btnRotCCW: 'rotateCCW',
+        btnDrop: 'drop'
+    };
+
+    for (const [id, action] of Object.entries(map)) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+
+        el.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            touchAction(action);
+        }, { passive: false });
+
+        el.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            touchAction(action);
+        });
+
+        // Auto-repeat for left/right when held
+        if (action === 'left' || action === 'right') {
+            let repeatTimer = null;
+            const startRepeat = () => {
+                repeatTimer = setInterval(() => touchAction(action), 120);
+            };
+            const stopRepeat = () => {
+                if (repeatTimer) { clearInterval(repeatTimer); repeatTimer = null; }
+            };
+            el.addEventListener('touchstart', startRepeat, { passive: true });
+            el.addEventListener('touchend', stopRepeat);
+            el.addEventListener('touchcancel', stopRepeat);
+            el.addEventListener('mousedown', startRepeat);
+            el.addEventListener('mouseup', stopRepeat);
+            el.addEventListener('mouseleave', stopRepeat);
+        }
+    }
+}
+
+// ── Swipe Gesture Controls on Canvas ────────────────────────
+let touchStartX = 0, touchStartY = 0, touchStartTime = 0;
+
+function setupSwipeControls() {
+    const gc = document.getElementById('gameCanvas');
+    if (!gc) return;
+
+    gc.addEventListener('touchstart', (e) => {
+        const t = e.touches[0];
+        touchStartX = t.clientX;
+        touchStartY = t.clientY;
+        touchStartTime = Date.now();
+        e.preventDefault();
+        ensureAudio();
+    }, { passive: false });
+
+    gc.addEventListener('touchend', (e) => {
+        if (!running || over || !cur) return;
+        const t = e.changedTouches[0];
+        const dx = t.clientX - touchStartX;
+        const dy = t.clientY - touchStartY;
+        const dt = Date.now() - touchStartTime;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < 15 && dt < 300) {
+            // Tap → rotate
+            tryRotate(true);
+        } else if (dist > 30) {
+            const angle = Math.atan2(dy, dx);
+            if (angle > -Math.PI * 0.75 && angle < -Math.PI * 0.25) {
+                // Swipe up → hard drop
+                if (!animating) hardDrop();
+            } else if (angle > Math.PI * 0.25 && angle < Math.PI * 0.75) {
+                // Swipe down → rotate CCW
+                tryRotate(false);
+            } else if (Math.abs(angle) < Math.PI * 0.25) {
+                // Swipe right
+                moveH(1);
+            } else {
+                // Swipe left
+                moveH(-1);
+            }
+        }
+        draw();
+        e.preventDefault();
+    }, { passive: false });
+
+    gc.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+}
 
 // ── Start / End ────────────────────────────────────────────
 function startGame() {
@@ -991,6 +1218,8 @@ function startGame() {
 
     spawn();
     draw();
+    setupTouchButtons();
+    setupSwipeControls();
     requestAnimationFrame(tick);
 }
 
