@@ -331,22 +331,19 @@
             <p><span class="key">SPACE</span> Instant drop upward</p>
         </div>
         <div class="mobile-hint" style="display:none; margin-top:15px; padding:12px; background:rgba(0,255,136,0.15); border-radius:8px; border:1px solid rgba(0,255,136,0.3);">
-            <p>📱 <strong>Touch Controls:</strong></p>
-            <p>Use the on-screen buttons to move, rotate, and drop!</p>
+            <p>📱 <strong>Swipe Controls:</strong></p>
+            <p>Swipe left/right to move, up to drop, down to rotate</p>
         </div>
         <div style="margin-top: 20px;">
             <p style="margin-bottom: 15px; font-size: 1.1em;">Select Difficulty:</p>
             <div class="desktop-controls" style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
-                <p style="margin: 5px 0;"><span class="key">1</span> Easy (15% scaling)</p>
-                <p style="margin: 5px 0;"><span class="key">2</span> Medium (25% scaling)</p>
-                <p style="margin: 5px 0;"><span class="key">3</span> Hard (35% scaling)</p>
+                <p style="margin: 5px 0;"><span class="key">1</span> Easy</p>
+                <p style="margin: 5px 0;"><span class="key">2</span> Medium</p>
+                <p style="margin: 5px 0;"><span class="key">3</span> Hard</p>
             </div>
-            <div class="mobile-hint" style="display:none; margin-top: 10px;">
-                <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
-                    <button onclick="ensureAudio(); setDifficultyAndStart(0.85)" style="padding: 10px 20px; font-size: 0.9em; margin: 0;">Easy</button>
-                    <button onclick="ensureAudio(); setDifficultyAndStart(0.75)" style="padding: 10px 20px; font-size: 0.9em; margin: 0;">Medium</button>
-                    <button onclick="ensureAudio(); setDifficultyAndStart(0.65)" style="padding: 10px 20px; font-size: 0.9em; margin: 0;">Hard</button>
-                </div>
+            <div class="mobile-hint" style="display:none; margin-top: 15px; padding: 12px; background: rgba(0,255,136,0.15); border-radius: 8px; border: 1px solid rgba(0,255,136,0.3);">
+                <p>📱 <strong>Swipe Controls:</strong></p>
+                <p>Swipe left/right to move, up to drop, down to rotate</p>
             </div>
         </div>
     </div>
@@ -393,8 +390,8 @@
         </div>
     </div>
 
-    <!-- Mobile touch controls -->
-    <div class="touch-controls" id="touchControls">
+    <!-- Mobile touch controls - REMOVED, using swipe only -->
+    <div class="touch-controls" id="touchControls" style="display: none !important;">
         <div class="touch-row">
             <div class="touch-btn" id="btnRotCCW">↺</div>
             <div class="touch-btn wide" id="btnDrop">⬆ DROP</div>
@@ -1469,43 +1466,8 @@ function touchAction(action) {
 }
 
 function setupTouchButtons() {
-    const map = {
-        btnLeft: 'left', btnRight: 'right',
-        btnRotCW: 'rotateCW', btnRotCCW: 'rotateCCW',
-        btnDrop: 'drop'
-    };
-
-    for (const [id, action] of Object.entries(map)) {
-        const el = document.getElementById(id);
-        if (!el) continue;
-
-        el.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            touchAction(action);
-        }, { passive: false });
-
-        el.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            touchAction(action);
-        });
-
-        // Auto-repeat for left/right when held
-        if (action === 'left' || action === 'right') {
-            let repeatTimer = null;
-            const startRepeat = () => {
-                repeatTimer = setInterval(() => touchAction(action), 120);
-            };
-            const stopRepeat = () => {
-                if (repeatTimer) { clearInterval(repeatTimer); repeatTimer = null; }
-            };
-            el.addEventListener('touchstart', startRepeat, { passive: true });
-            el.addEventListener('touchend', stopRepeat);
-            el.addEventListener('touchcancel', stopRepeat);
-            el.addEventListener('mousedown', startRepeat);
-            el.addEventListener('mouseup', stopRepeat);
-            el.addEventListener('mouseleave', stopRepeat);
-        }
-    }
+    // Touch buttons removed - swipe controls only
+    return;
 }
 
 // ── Swipe Gesture Controls on Canvas ────────────────────────
@@ -1525,7 +1487,7 @@ function setupSwipeControls() {
     }, { passive: false });
 
     gc.addEventListener('touchend', (e) => {
-        if (!running || over || !cur) return;
+        if (!running || over || !cur) return; // Swipe controls active during gameplay
         const t = e.changedTouches[0];
         const dx = t.clientX - touchStartX;
         const dy = t.clientY - touchStartY;
@@ -1588,7 +1550,7 @@ function startGame() {
 
     spawn();
     draw();
-    setupTouchButtons();
+    // setupTouchButtons();  // Disabled - swipe controls only
     setupSwipeControls();
     requestAnimationFrame(tick);
 }
