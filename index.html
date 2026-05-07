@@ -450,92 +450,10 @@ let difficultyScalingFactor = 0.75;  // Default: Medium (25% per step)
 // ── Audio ────────────────────────────────────────────
 const AudioCtx = window.AudioContext || window.webkitAudioContext;
 let audioCtx = null;
-let bgMusicPlaying = false;
-let bgMusicTimeouts = [];
 
 function ensureAudio() {
     if (!audioCtx) audioCtx = new AudioCtx();
     if (audioCtx.state === 'suspended') audioCtx.resume();
-}
-
-// 8-bit chiptune background music - polyphonic melody
-function startBackgroundMusic() {
-    if (bgMusicPlaying) return;
-    ensureAudio();
-    bgMusicPlaying = true;
-    
-    // Light-hearted pentatonic melody (C major)
-    const notes = [
-        { freq: 523, duration: 0.25 },   // C5
-        { freq: 659, duration: 0.25 },   // E5
-        { freq: 784, duration: 0.25 },   // G5
-        { freq: 659, duration: 0.25 },   // E5
-        { freq: 523, duration: 0.5 },    // C5
-        { freq: 587, duration: 0.25 },   // D5
-        { freq: 659, duration: 0.25 },   // E5
-        { freq: 784, duration: 0.5 },    // G5
-        { freq: 880, duration: 0.25 },   // A5
-        { freq: 784, duration: 0.25 },   // G5
-        { freq: 659, duration: 0.25 },   // E5
-        { freq: 587, duration: 0.5 },    // D5
-    ];
-    
-    // Bass line (harmony underneath)
-    const bass = [
-        { freq: 262, duration: 0.5 },    // C4
-        { freq: 330, duration: 0.5 },    // E4
-        { freq: 392, duration: 0.5 },    // G4
-        { freq: 330, duration: 0.5 },    // E4
-        { freq: 262, duration: 0.5 },    // C4
-        { freq: 294, duration: 0.5 },    // D4
-        { freq: 330, duration: 0.5 },    // E4
-        { freq: 392, duration: 0.5 },    // G4
-        { freq: 440, duration: 0.5 },    // A4
-        { freq: 392, duration: 0.5 },    // G4
-        { freq: 330, duration: 0.5 },    // E4
-        { freq: 294, duration: 0.5 },    // D4
-    ];
-    
-    playMelodyLoop(notes, 0, 0.4);
-    playMelodyLoop(bass, 0.05, 0.15, true);
-}
-
-function playMelodyLoop(notes, startDelay, volume, isBass = false) {
-    if (!bgMusicPlaying) return;
-    let noteIndex = 0;
-    let currentTime = audioCtx.currentTime + startDelay;
-    
-    function scheduleNote() {
-        if (!bgMusicPlaying) return;
-        const note = notes[noteIndex % notes.length];
-        const startAt = currentTime;
-        const duration = note.duration;
-        
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = isBass ? 'triangle' : 'square';
-        osc.frequency.setValueAtTime(note.freq, startAt);
-        gain.gain.setValueAtTime(0, startAt);
-        gain.gain.linearRampToValueAtTime(volume, startAt + 0.05);
-        gain.gain.linearRampToValueAtTime(volume * 0.6, startAt + duration * 0.8);
-        gain.gain.linearRampToValueAtTime(0, startAt + duration);
-        
-        osc.connect(gain).connect(audioCtx.destination);
-        osc.start(startAt);
-        osc.stop(startAt + duration);
-        
-        currentTime += duration;
-        noteIndex++;
-        const delay = duration * 1000;
-        bgMusicTimeouts.push(setTimeout(scheduleNote, delay));
-    }
-    scheduleNote();
-}
-
-function stopBackgroundMusic() {
-    bgMusicPlaying = false;
-    bgMusicTimeouts.forEach(t => clearTimeout(t));
-    bgMusicTimeouts = [];
 }
 
 // Soft "puff" when a piece floats up one row
@@ -1619,7 +1537,6 @@ function startGame() {
     dropInterval = 800;
     running = true; over = false;
     animating = false;
-    startBackgroundMusic();
     lastDrop = 0;
     lastTime = 0;
     next = null;
@@ -1642,7 +1559,6 @@ function startGame() {
 function endGame() {
     running = false;
     over = true;
-    stopBackgroundMusic();
     sfxGameOver();
     // Delay showing the game over screen so the sound plays first
     setTimeout(() => {
