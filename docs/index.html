@@ -182,8 +182,8 @@
                 min-height: 100vh;
             }
 
-            h1 { font-size: 1.6em; margin-bottom: 4px; }
-            .subtitle { font-size: 0.85em; margin-bottom: 8px; }
+            h1 { font-size: 1.4em; margin-bottom: 2px; }
+            .subtitle { font-size: 0.75em; margin-bottom: 4px; }
 
             .game-wrapper {
                 flex-direction: column;
@@ -193,7 +193,7 @@
             }
 
             #gameCanvas {
-                width: min(300px, 85vw);
+                width: min(250px, 70vw);
                 height: auto;
                 aspect-ratio: 1 / 2;
             }
@@ -205,16 +205,23 @@
                 min-width: unset;
                 width: 100%;
                 max-width: 340px;
-                gap: 8px;
-                padding: 10px;
+                gap: 6px;
+                padding: 6px;
             }
 
-            .stat-box { padding: 8px 12px; flex: 1; min-width: 80px; }
-            .stat-value { font-size: 1.3em; }
-            .preview-box { padding: 8px; }
-            #previewCanvas { width: 70px; height: 70px; }
+            .stat-box { padding: 6px 10px; flex: 1; min-width: 70px; }
+            .stat-label { font-size: 0.75em; }
+            .stat-value { font-size: 1.1em; }
+            .preview-box { padding: 6px; }
+            .preview-label { font-size: 0.75em; margin-bottom: 4px; }
+            #previewCanvas { width: 55px; height: 55px; }
             .controls { display: none; }
             .touch-controls { display: flex; }
+
+            .touch-btn { height: 48px; font-size: 1.3em; }
+            .touch-btn.wide { font-size: 1em; }
+            .touch-controls { gap: 6px; }
+            .touch-row { gap: 8px; }
 
             .title-screen { padding: 20px; overflow-y: auto; }
             .title-screen h1 { font-size: 2.2em; }
