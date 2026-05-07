@@ -334,7 +334,21 @@
             <p>📱 <strong>Touch Controls:</strong></p>
             <p>Use the on-screen buttons to move, rotate, and drop!</p>
         </div>
-        <button onclick="ensureAudio(); startGame()">Start Game</button>
+        <div style="margin-top: 20px;">
+            <p style="margin-bottom: 15px; font-size: 1.1em;">Select Difficulty:</p>
+            <div class="desktop-controls" style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                <p style="margin: 5px 0;"><span class="key">1</span> Easy (15% scaling)</p>
+                <p style="margin: 5px 0;"><span class="key">2</span> Medium (25% scaling)</p>
+                <p style="margin: 5px 0;"><span class="key">3</span> Hard (35% scaling)</p>
+            </div>
+            <div class="mobile-hint" style="display:none; margin-top: 10px;">
+                <div style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+                    <button onclick="ensureAudio(); setDifficultyAndStart(0.85)" style="padding: 10px 20px; font-size: 0.9em; margin: 0;">Easy</button>
+                    <button onclick="ensureAudio(); setDifficultyAndStart(0.75)" style="padding: 10px 20px; font-size: 0.9em; margin: 0;">Medium</button>
+                    <button onclick="ensureAudio(); setDifficultyAndStart(0.65)" style="padding: 10px 20px; font-size: 0.9em; margin: 0;">Hard</button>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -433,6 +447,7 @@ let score, lines, level;
 let running, over;
 let dropTimer, dropInterval;
 let canvas, ctx, previewCanvas, previewCtx;
+let difficultyScalingFactor = 0.75;  // Default: Medium (25% per step)
 
 // ── Audio ────────────────────────────────────────────
 const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -885,15 +900,25 @@ function updateScoreDisplay() {
 // At 40 lines: speed is capped (0.75^8 ≈ 0.100, so ~10x faster)
 // After that, speed stays constant
 function updateDropInterval() {
+    const maxStep = 8;  // 40 lines / 5 lines per step
     if (lines >= 40) {
         // Speed stays at level 8 (40 lines reached)
-        dropInterval = 800 * Math.pow(0.75, 8);  // ≈ 80ms (10x faster)
+        dropInterval = 800 * Math.pow(difficultyScalingFactor, maxStep);
     } else {
         // Calculate which step we're on (0-7)
         const step = Math.floor(lines / 5);
-        // Each step multiplies speed by 0.75 (25% faster)
-        dropInterval = 800 * Math.pow(0.75, step);
+        // Each step multiplies speed by the scaling factor
+        dropInterval = 800 * Math.pow(difficultyScalingFactor, step);
     }
+}
+
+// Difficulty levels:
+// Easy: 15% scaling (0.85 multiplier per step)
+// Medium: 25% scaling (0.75 multiplier per step)
+// Hard: 35% scaling (0.65 multiplier per step)
+function setDifficultyAndStart(factor) {
+    difficultyScalingFactor = factor;
+    startGame();
 }
 
 // Upward gravity: in Cloud Tetris, blocks float UP.
@@ -1405,6 +1430,13 @@ function updateAnimations(dt) {
 
 // ── Keyboard Controls ────────────────────────────────────────
 document.addEventListener('keydown', (e) => {
+    // Difficulty selection from title screen (1=Easy, 2=Medium, 3=Hard)
+    const titleScreen = document.getElementById('titleScreen');
+    if (!running && !over && !titleScreen.classList.contains('hidden')) {
+        if (e.key === '1') { e.preventDefault(); setDifficultyAndStart(0.85); return; }  // Easy: 15%
+        if (e.key === '2') { e.preventDefault(); setDifficultyAndStart(0.75); return; }  // Medium: 25%
+        if (e.key === '3') { e.preventDefault(); setDifficultyAndStart(0.65); return; }  // Hard: 35%
+    }
     if (!running || over || !cur) return;
 
     switch (e.key) {
