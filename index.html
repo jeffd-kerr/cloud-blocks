@@ -654,6 +654,9 @@ let popParticles = [];
 // Row flash: { rows:[], t, duration }
 let rowFlash = null;
 
+// Settle animations: { col, fromRow, toRow, color, t, duration }
+let settleAnims = [];
+
 // ── Board helpers ──────────────────────────────────────────
 function emptyBoard() {
     return Array.from({length: ROWS}, () => Array(COLS).fill(0));
@@ -881,38 +884,59 @@ function updateScoreDisplay() {
 // After a row is cleared, scan each column from top to bottom.
 // If there's an empty cell with a block below it, float the block up.
 function applyGravity() {
-    let moved = false;
+    // First pass: figure out where blocks need to go WITHOUT moving them yet
+    let moves = [];  // { col, fromRow, toRow, color }
 
-    // Scan each column independently
     for (let c = 0; c < COLS; c++) {
-        // Walk upward from row 0 (top). Pull blocks up to fill gaps.
-        // Find first empty cell scanning from top, then find next block below it.
-        let writeRow = -1; // next row to write a block into (going down)
+        let writeRow = -1;
 
-        // Find the topmost empty row in this column that has a block somewhere below
         for (let r = 0; r < ROWS; r++) {
             if (board[r][c] === 0) {
                 if (writeRow === -1) writeRow = r;
             } else if (writeRow !== -1) {
-                // Found a block below an empty space — float it up
-                board[writeRow][c] = board[r][c];
-                board[r][c] = 0;
-                moved = true;
-                writeRow++; // next empty slot
+                moves.push({ col: c, fromRow: r, toRow: writeRow, color: board[r][c] });
+                writeRow++;
             }
         }
     }
 
-    if (moved) {
-        sfxSettle();
-
-        // Check for chain clears after a short delay
-        setTimeout(() => {
-            chainClear();
-        }, 300);
-    } else {
+    if (moves.length === 0) {
         animating = false;
+        return;
     }
+
+    sfxSettle();
+
+    // Calculate animation duration based on max distance
+    const maxDist = Math.max(...moves.map(m => m.fromRow - m.toRow));
+    const duration = Math.min(400, Math.max(200, maxDist * 60));
+
+    // Create settle animations
+    for (const m of moves) {
+        settleAnims.push({
+            col: m.col,
+            fromRow: m.fromRow,
+            toRow: m.toRow,
+            color: m.color,
+            t: 0,
+            duration: duration
+        });
+
+        // Hide the block from the board immediately so it doesn't render in old position
+        board[m.fromRow][m.col] = 0;
+    }
+
+    // After animation completes, place blocks at final positions
+    setTimeout(() => {
+        // Apply all moves to the board
+        for (const m of moves) {
+            board[m.toRow][m.col] = m.color;
+        }
+        settleAnims = [];
+
+        // Check for chain clears
+        chainClear();
+    }, duration + 50);
 }
 
 // Chain clear: check if gravity created new full rows
@@ -1101,6 +1125,88 @@ function draw() {
 
         ctx.restore();
     }
+
+    // ── Settle animations (blocks floating upward) ─────────
+    for (const s of settleAnims) {
+        const progress = Math.min(s.t / s.duration, 1);
+        // Ease-out cubic for smooth deceleration
+        const ease = 1 - Math.pow(1 - progress, 3);
+        const fromY = s.fromRow * CELL;
+        const toY = s.toRow * CELL;
+        const currentY = fromY + (toY - fromY) * ease;
+        const x = s.col * CELL;
+
+        // Find piece key from color for proper cloud rendering
+        let key = null;
+        for (const k of PIECE_KEYS) {
+            if (COLORS[k] === s.color) { key = k; break; }
+        }
+
+        // Draw the cloud block at its animated position
+        ctx.save();
+        // Slight glow trail behind the moving block
+        if (progress < 0.8) {
+            const trailAlpha = (1 - progress) * 0.3;
+            const light = (key && COLORS_LIGHT[key]) || '#ffffff';
+            ctx.globalAlpha = trailAlpha;
+            ctx.fillStyle = light;
+            // Trail stretches from current pos down to where it came from
+            const trailTop = currentY + CELL / 2;
+            const trailBot = Math.min(fromY + CELL / 2, trailTop + CELL * 1.5);
+            for (let i = 0; i < 3; i++) {
+                const ty = trailTop + (trailBot - trailTop) * (i / 3);
+                const tr = (CELL / 2 - 2) * (1 - i * 0.25);
+                ctx.beginPath();
+                ctx.arc(x + CELL / 2, ty, tr, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        ctx.restore();
+
+        // Draw the actual block at animated position using pixel coords
+        const cx_b = x + CELL / 2;
+        const cy_b = currentY + CELL / 2;
+        const r_b = CELL / 2 - 1;
+        const light = (key && COLORS_LIGHT[key]) || '#ffffff';
+
+        ctx.save();
+        ctx.shadowColor = s.color;
+        ctx.shadowBlur = 8;
+
+        const rr = r_b * 0.6;
+        ctx.beginPath();
+        ctx.moveTo(x + 2 + rr, currentY + 2);
+        ctx.arcTo(x + CELL - 2, currentY + 2, x + CELL - 2, currentY + CELL - 2, rr);
+        ctx.arcTo(x + CELL - 2, currentY + CELL - 2, x + 2, currentY + CELL - 2, rr);
+        ctx.arcTo(x + 2, currentY + CELL - 2, x + 2, currentY + 2, rr);
+        ctx.arcTo(x + 2, currentY + 2, x + CELL - 2, currentY + 2, rr);
+        ctx.closePath();
+
+        const grad = ctx.createRadialGradient(cx_b - 3, cy_b - 4, 2, cx_b, cy_b, r_b);
+        grad.addColorStop(0, light);
+        grad.addColorStop(0.6, s.color);
+        grad.addColorStop(1, s.color);
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = light;
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath();
+        ctx.arc(cx_b - 5, cy_b - 4, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx_b + 4, cy_b - 5, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.globalAlpha = 0.7;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(cx_b - 5, cy_b - 6, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    }
 }
 
 function drawCloud(context, col, row, color, pieceKey) {
@@ -1274,6 +1380,11 @@ function updateAnimations(dt) {
             rowFlash = null;
         }
     }
+
+    // Update settle animations
+    for (const s of settleAnims) {
+        s.t += dt;
+    }
 }
 
 // ── Keyboard Controls ────────────────────────────────────────
@@ -1421,6 +1532,7 @@ function startGame() {
     floatTrails = [];
     popParticles = [];
     rowFlash = null;
+    settleAnims = [];
 
     document.getElementById('score').textContent = '0';
     document.getElementById('lines').textContent = '0';
