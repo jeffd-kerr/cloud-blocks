@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud Tetris</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Arial', sans-serif;
+            color: #fff;
+        }
+
+        .container {
+            text-align: center;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        }
+
+        h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            animation: floatTitle 3s ease-in-out infinite;
+        }
+
+        @keyframes floatTitle {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .subtitle {
+            font-size: 1.1em;
+            margin-bottom: 20px;
+            opacity: 0.9;
+        }
+
+        .game-wrapper {
+            display: flex;
+            gap: 30px;
+            margin-top: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        canvas {
+            border: 3px solid rgba(255,255,255,0.4);
+            box-shadow: 0 0 25px rgba(100, 180, 255, 0.3);
+            background: linear-gradient(to top, #2a3a6e, #4a6eb5, #7aaae8, #b0d4f8);
+        }
+
+        .stats-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #00d4ff;
+            min-width: 200px;
+        }
+
+        .stat-box {
+            text-align: left;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #00d4ff;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #00ff88;
+            margin-top: 5px;
+        }
+
+        .preview-box {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #00d4ff;
+        }
+
+        .preview-label {
+            font-size: 0.9em;
+            opacity: 0.8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        #previewCanvas {
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            box-shadow: none;
+            background: rgba(0, 0, 0, 0.3);
+            display: block;
+            margin: 0 auto;
+        }
+
+        .controls {
+            margin-top: 20px;
+            font-size: 0.85em;
+            opacity: 0.9;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .control-item { margin: 5px 0; }
+
+        button {
+            margin-top: 20px;
+            padding: 12px 30px;
+            font-size: 1em;
+            background: linear-gradient(135deg, #00ff88, #00d4ff);
+            border: none;
+            color: #000;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 255, 136, 0.4);
+        }
+
+        /* Overlays */
+        .overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; justify-content: center; align-items: center;
+            flex-direction: column; gap: 30px; z-index: 200;
+        }
+
+        .overlay.hidden { display: none; }
+
+        .title-screen {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .title-screen h1 { font-size: 4em; }
+
+        .instructions {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 30px;
+            border-radius: 15px;
+            border: 2px solid #00d4ff;
+            max-width: 500px;
+            text-align: left;
+        }
+
+        .instructions h3 { margin-bottom: 15px; color: #00ff88; }
+        .instructions p { margin: 10px 0; line-height: 1.6; }
+
+        .instructions .key {
+            display: inline-block;
+            background: rgba(0, 212, 255, 0.3);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-weight: bold;
+        }
+
+        .game-over-screen {
+            background: rgba(0, 0, 0, 0.85);
+            text-align: center;
+        }
+
+        .game-over-screen h2 {
+            font-size: 2.5em;
+            color: #ff0055;
+        }
+
+        .game-over-screen p { font-size: 1.2em; margin: 10px 0; }
+
+        .game-over-screen .final-score {
+            font-size: 2em;
+            color: #00ff88;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+
+        .game-over-screen button {
+            background: linear-gradient(135deg, #ff0055, #ff6600);
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Title Screen -->
+<div class="overlay title-screen" id="titleScreen">
+    <h1>☁️ CLOUD TETRIS ☁️</h1>
+    <div class="instructions">
+        <h3>How to Play</h3>
+        <p>Pieces float <strong>UPWARD</strong> from the bottom! Create complete horizontal lines before the board fills up.</p>
+        <h3>Controls</h3>
+        <p><span class="key">← →</span> Move piece left / right</p>
+        <p><span class="key">↑</span> or <span class="key">Z</span> Rotate clockwise</p>
+        <p><span class="key">↓</span> or <span class="key">X</span> Rotate counter-clockwise</p>
+        <p><span class="key">SPACE</span> Instant drop upward</p>
+        <button onclick="startGame()">Start Game</button>
+    </div>
+</div>
+
+<!-- Game Over Screen -->
+<div class="overlay game-over-screen hidden" id="gameOverScreen">
+    <h2>GAME OVER</h2>
+    <p>The clouds have filled the sky!</p>
+    <div class="final-score" id="finalScore">0</div>
+    <p>Lines Cleared: <span id="finalLines">0</span></p>
+    <button onclick="startGame()">Play Again</button>
+</div>
+
+<!-- Main Game -->
+<div class="container" id="gameContainer" style="display:none;">
+    <h1>☁️ CLOUD TETRIS ☁️</h1>
+    <p class="subtitle">Float upward to clear lines!</p>
+    <div class="game-wrapper">
+        <canvas id="gameCanvas" width="300" height="600"></canvas>
+        <div class="stats-panel">
+            <div class="stat-box">
+                <div class="stat-label">Score</div>
+                <div class="stat-value" id="score">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Lines</div>
+                <div class="stat-value" id="lines">0</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Level</div>
+                <div class="stat-value" id="level">1</div>
+            </div>
+            <div class="preview-box">
+                <div class="preview-label">Next Piece</div>
+                <canvas id="previewCanvas" width="120" height="120"></canvas>
+            </div>
+            <div class="controls">
+                <div class="control-item">← → Move</div>
+                <div class="control-item">↑ / Z  Rotate CW</div>
+                <div class="control-item">↓ / X  Rotate CCW</div>
+                <div class="control-item">SPACE  Drop Up</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ── Constants ──────────────────────────────────────────────
+const COLS = 10;
+const ROWS = 20;
+const CELL = 30;                           // px per cell
+// Soft, pastel cloud colors
+const COLORS = {
+    I: '#b0e0ff', O: '#ffe8a0', T: '#d8b4fe',
+    S: '#a8f0c0', Z: '#ffb0b8', J: '#a0c8ff', L: '#ffd0a0'
+};
+
+// Lighter tint for cloud highlights
+const COLORS_LIGHT = {
+    I: '#ddf0ff', O: '#fff5d0', T: '#f0e0ff',
+    S: '#d0ffe0', Z: '#ffe0e4', J: '#d0e4ff', L: '#ffe8d0'
+};
+
+// Each shape is an array of [row, col] offsets.
+// Row 0 is the piece's local top; positive rows go down.
+const SHAPES = {
+    I: [[0,0],[0,1],[0,2],[0,3]],
+    O: [[0,0],[0,1],[1,0],[1,1]],
+    T: [[0,1],[1,0],[1,1],[1,2]],
+    S: [[0,1],[0,2],[1,0],[1,1]],
+    Z: [[0,0],[0,1],[1,1],[1,2]],
+    J: [[0,0],[1,0],[1,1],[1,2]],
+    L: [[0,2],[1,0],[1,1],[1,2]]
+};
+
+const PIECE_KEYS = Object.keys(SHAPES);
+
+// ── State ──────────────────────────────────────────────────
+let board;           // board[row][col] = color | 0   (row 0 = TOP of screen)
+let cur;             // { blocks:[[r,c],…], color, cx, cy, key }
+let next;
+let score, lines, level;
+let running, over;
+let dropTimer, dropInterval;
+let canvas, ctx, previewCanvas, previewCtx;
+
+// ── Audio ────────────────────────────────────────────
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+
+function ensureAudio() {
+    if (!audioCtx) audioCtx = new AudioCtx();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+// Soft "puff" when a piece floats up one row
+function sfxFloat() {
+    ensureAudio();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(900, audioCtx.currentTime + 0.06);
+    gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + 0.08);
+}
+
+// Thud / lock sound when piece is placed
+function sfxLock() {
+    ensureAudio();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(220, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(120, audioCtx.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+
+    // Add a noise burst for that satisfying "puff" landing
+    const bufLen = audioCtx.sampleRate * 0.08;
+    const buf = audioCtx.createBuffer(1, bufLen, audioCtx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufLen; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufLen);
+    const noise = audioCtx.createBufferSource();
+    const nGain = audioCtx.createGain();
+    noise.buffer = buf;
+    nGain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+    nGain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+    noise.connect(nGain).connect(audioCtx.destination);
+    noise.start(); noise.stop(audioCtx.currentTime + 0.08);
+}
+
+// Sparkly pop when rows are cleared
+function sfxPop(numLines) {
+    ensureAudio();
+    const baseFreqs = [523, 659, 784, 1047];  // C5, E5, G5, C6
+    const t = audioCtx.currentTime;
+
+    for (let i = 0; i < Math.min(numLines, 4); i++) {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        const startTime = t + i * 0.07;
+        osc.frequency.setValueAtTime(baseFreqs[i], startTime);
+        osc.frequency.exponentialRampToValueAtTime(baseFreqs[i] * 1.5, startTime + 0.15);
+        gain.gain.setValueAtTime(0.12, startTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.25);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start(startTime); osc.stop(startTime + 0.25);
+    }
+
+    // Shimmer noise
+    const shimLen = audioCtx.sampleRate * 0.3;
+    const shimBuf = audioCtx.createBuffer(1, shimLen, audioCtx.sampleRate);
+    const shimData = shimBuf.getChannelData(0);
+    for (let i = 0; i < shimLen; i++) {
+        shimData[i] = (Math.random() * 2 - 1) * Math.sin(i / shimLen * Math.PI) * 0.3;
+    }
+    const shimmer = audioCtx.createBufferSource();
+    const shimGain = audioCtx.createGain();
+    const shimFilter = audioCtx.createBiquadFilter();
+    shimmer.buffer = shimBuf;
+    shimFilter.type = 'highpass';
+    shimFilter.frequency.value = 3000;
+    shimGain.gain.setValueAtTime(0.08, t);
+    shimGain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    shimmer.connect(shimFilter).connect(shimGain).connect(audioCtx.destination);
+    shimmer.start(); shimmer.stop(t + 0.35);
+}
+
+// Whoosh for hard drop
+function sfxWhoosh() {
+    ensureAudio();
+    const bufLen = audioCtx.sampleRate * 0.2;
+    const buf = audioCtx.createBuffer(1, bufLen, audioCtx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufLen; i++) {
+        const env = Math.sin(i / bufLen * Math.PI);
+        data[i] = (Math.random() * 2 - 1) * env;
+    }
+    const noise = audioCtx.createBufferSource();
+    const gain = audioCtx.createGain();
+    const filter = audioCtx.createBiquadFilter();
+    noise.buffer = buf;
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(800, audioCtx.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(2500, audioCtx.currentTime + 0.15);
+    filter.Q.value = 1.5;
+    gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+    noise.connect(filter).connect(gain).connect(audioCtx.destination);
+    noise.start(); noise.stop(audioCtx.currentTime + 0.2);
+}
+
+// ── Animation state ────────────────────────────────────────
+let animating = false;           // true while any animation plays
+
+// Float-up trail: array of { col, startY, endY, color, key, t, duration }
+let floatTrails = [];
+
+// Pop particles: array of { x, y, vx, vy, color, r, t, duration, opacity }
+let popParticles = [];
+
+// Row flash: { rows:[], t, duration }
+let rowFlash = null;
+
+// ── Board helpers ──────────────────────────────────────────
+function emptyBoard() {
+    return Array.from({length: ROWS}, () => Array(COLS).fill(0));
+}
+
+// Absolute positions of a piece's blocks on the board
+function absBlocks(piece) {
+    return piece.blocks.map(([r,c]) => [piece.cy + r, piece.cx + c]);
+}
+
+// Collision check for absolute positions
+function collides(positions) {
+    for (const [r, c] of positions) {
+        if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return true;
+        if (board[r][c]) return true;
+    }
+    return false;
+}
+
+// ── Piece helpers ──────────────────────────────────────────
+function randomPiece() {
+    const key = PIECE_KEYS[Math.floor(Math.random() * PIECE_KEYS.length)];
+    const blocks = SHAPES[key].map(b => [...b]);
+    const color = COLORS[key];
+
+    // Compute bounding box width to centre horizontally
+    const minC = Math.min(...blocks.map(b => b[1]));
+    const maxC = Math.max(...blocks.map(b => b[1]));
+    const w = maxC - minC + 1;
+    const cx = Math.floor((COLS - w) / 2);
+
+    // Compute height so we can place it at the very bottom
+    const minR = Math.min(...blocks.map(b => b[0]));
+    const maxR = Math.max(...blocks.map(b => b[0]));
+    const h = maxR - minR + 1;
+
+    // cy places the piece so its BOTTOM row sits at board row ROWS-1
+    const cy = ROWS - h;
+
+    return { blocks, color, cx, cy, key };
+}
+
+function spawn() {
+    cur = next || randomPiece();
+    next = randomPiece();
+
+    // If spawn position collides → game over
+    if (collides(absBlocks(cur))) {
+        endGame();
+    }
+
+    drawPreview();
+}
+
+// ── Rotation (SRS-lite wall kicks) ─────────────────────────
+function rotateBlocks(blocks, clockwise) {
+    // Find bounding box
+    const rows = blocks.map(b => b[0]);
+    const cols = blocks.map(b => b[1]);
+    const maxR = Math.max(...rows);
+    const maxC = Math.max(...cols);
+
+    if (clockwise) {
+        return blocks.map(([r, c]) => [c, maxR - r]);
+    } else {
+        return blocks.map(([r, c]) => [maxC - c, r]);
+    }
+}
+
+function tryRotate(clockwise) {
+    if (!cur) return;
+    const newBlocks = rotateBlocks(cur.blocks, clockwise);
+    const kicks = [[0,0],[-1,0],[1,0],[0,-1],[0,1],[-2,0],[2,0]];
+    for (const [dc, dr] of kicks) {
+        const test = { ...cur, blocks: newBlocks, cx: cur.cx + dc, cy: cur.cy + dr };
+        if (!collides(absBlocks(test))) {
+            cur.blocks = newBlocks;
+            cur.cx = test.cx;
+            cur.cy = test.cy;
+            return;
+        }
+    }
+}
+
+// ── Movement ───────────────────────────────────────────────
+function moveH(dx) {
+    if (!cur) return;
+    const test = { ...cur, cx: cur.cx + dx };
+    if (!collides(absBlocks(test))) cur.cx += dx;
+}
+
+// Float one row UP (row index decreases)
+function floatUp() {
+    if (!cur) return;
+    const test = { ...cur, cy: cur.cy - 1 };
+    if (collides(absBlocks(test))) {
+        lock();
+    } else {
+        cur.cy -= 1;
+        sfxFloat();
+    }
+}
+
+// Instant drop upward — now with float animation
+function hardDrop() {
+    if (!cur || animating) return;
+
+    const startY = cur.cy;
+
+    // Find final position
+    while (true) {
+        const test = { ...cur, cy: cur.cy - 1 };
+        if (collides(absBlocks(test))) break;
+        cur.cy -= 1;
+    }
+
+    const endY = cur.cy;
+    const distance = startY - endY;
+
+    if (distance > 1) {
+        // Create float trails for each block
+        for (const [br, bc] of cur.blocks) {
+            floatTrails.push({
+                col: cur.cx + bc,
+                startY: (startY + br) * CELL,
+                endY: (endY + br) * CELL,
+                color: cur.color,
+                key: cur.key,
+                t: 0,
+                duration: Math.min(300, distance * 40)
+            });
+        }
+        sfxWhoosh();
+    }
+
+    lock();
+}
+
+// ── Lock & line clear ──────────────────────────────────────
+function lock() {
+    for (const [r, c] of absBlocks(cur)) {
+        if (r >= 0 && r < ROWS && c >= 0 && c < COLS) {
+            board[r][c] = cur.color;
+        }
+    }
+    sfxLock();
+    clearLines();
+    spawn();
+}
+
+function clearLines() {
+    // Find full rows
+    let fullRows = [];
+    for (let r = 0; r < ROWS; r++) {
+        if (board[r].every(c => c !== 0)) {
+            fullRows.push(r);
+        }
+    }
+
+    if (fullRows.length === 0) return;
+
+    // Start pop animation — freeze game briefly
+    animating = true;
+
+    // Spawn pop particles for each cell in the full rows
+    for (const r of fullRows) {
+        for (let c = 0; c < COLS; c++) {
+            const color = board[r][c];
+            const bx = c * CELL + CELL / 2;
+            const by = r * CELL + CELL / 2;
+
+            // 6 particles per cell
+            for (let i = 0; i < 6; i++) {
+                const angle = (Math.PI * 2 / 6) * i + Math.random() * 0.5;
+                const speed = 1.5 + Math.random() * 3;
+                popParticles.push({
+                    x: bx, y: by,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed - 1.5,  // slight upward bias
+                    color: color,
+                    radius: 2 + Math.random() * 3,
+                    t: 0,
+                    duration: 400 + Math.random() * 200,
+                    opacity: 1
+                });
+            }
+        }
+    }
+
+    // Flash the rows white briefly
+    rowFlash = { rows: fullRows, t: 0, duration: 250 };
+    sfxPop(fullRows.length);
+
+    // After animation, actually remove the rows
+    setTimeout(() => {
+        // Remove rows (splice from bottom to top to keep indices valid)
+        fullRows.sort((a, b) => b - a);
+        for (const r of fullRows) {
+            board.splice(r, 1);
+            board.push(Array(COLS).fill(0));
+        }
+
+        const cleared = fullRows.length;
+        const bonus = [0, 100, 300, 500, 800];
+        score += (bonus[cleared] || 1000) * level;
+        lines += cleared;
+        level = 1 + Math.floor(lines / 10);
+        dropInterval = Math.max(100, 800 - (level - 1) * 60);
+
+        document.getElementById('score').textContent = score;
+        document.getElementById('lines').textContent = lines;
+        document.getElementById('level').textContent = level;
+
+        rowFlash = null;
+        animating = false;
+    }, 350);
+}
+
+// ── Rendering ──────────────────────────────────────────────
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Grid lines
+    ctx.strokeStyle = 'rgba(100,150,200,0.15)';
+    ctx.lineWidth = 0.5;
+    for (let r = 0; r <= ROWS; r++) {
+        ctx.beginPath(); ctx.moveTo(0, r * CELL); ctx.lineTo(COLS * CELL, r * CELL); ctx.stroke();
+    }
+    for (let c = 0; c <= COLS; c++) {
+        ctx.beginPath(); ctx.moveTo(c * CELL, 0); ctx.lineTo(c * CELL, ROWS * CELL); ctx.stroke();
+    }
+
+    // Placed blocks
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+            if (board[r][c]) drawBlock(ctx, c, r, board[r][c]);
+        }
+    }
+
+    // Row flash overlay (white flash on rows about to pop)
+    if (rowFlash) {
+        const progress = rowFlash.t / rowFlash.duration;
+        // Flash bright then fade: sin curve
+        const alpha = Math.sin(progress * Math.PI) * 0.7;
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+        for (const r of rowFlash.rows) {
+            ctx.fillRect(0, r * CELL, COLS * CELL, CELL);
+        }
+    }
+
+    // Ghost piece (shows where piece will land at top)
+    if (cur && !animating) {
+        let ghostY = cur.cy;
+        while (true) {
+            const test = { ...cur, cy: ghostY - 1 };
+            if (collides(absBlocks(test))) break;
+            ghostY -= 1;
+        }
+        for (const [r, c] of [{...cur, cy: ghostY}].flatMap(p =>
+            p.blocks.map(([br, bc]) => [p.cy + br, p.cx + bc])
+        )) {
+            if (r >= 0 && r < ROWS && c >= 0 && c < COLS) {
+                ctx.fillStyle = 'rgba(255,255,255,0.15)';
+                ctx.fillRect(c * CELL + 1, r * CELL + 1, CELL - 2, CELL - 2);
+            }
+        }
+
+        // Current piece
+        for (const [r, c] of absBlocks(cur)) {
+            if (r >= 0 && r < ROWS && c >= 0 && c < COLS) {
+                drawCloud(ctx, c, r, cur.color, cur.key);
+            }
+        }
+    }
+
+    // ── Float-up trails ────────────────────────────────────
+    for (const trail of floatTrails) {
+        const progress = trail.t / trail.duration;
+        // Eased position (ease-out)
+        const ease = 1 - Math.pow(1 - progress, 3);
+        const currentY = trail.startY + (trail.endY - trail.startY) * ease;
+
+        // Draw a fading ghost cloud at current anim position
+        const alpha = 1 - progress;
+        ctx.save();
+        ctx.globalAlpha = alpha * 0.5;
+        const x = trail.col * CELL;
+        const cxC = x + CELL / 2;
+        const cyC = currentY + CELL / 2;
+        const light = (trail.key && COLORS_LIGHT[trail.key]) || '#ffffff';
+
+        // Simple fading circle trail
+        const rr = CELL / 2 - 1;
+        ctx.fillStyle = light;
+        ctx.beginPath();
+        ctx.arc(cxC, cyC, rr, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Small wisp particles behind it
+        ctx.globalAlpha = alpha * 0.3;
+        for (let i = 1; i <= 3; i++) {
+            const wispY = currentY + CELL / 2 + i * 10 * (1 - progress);
+            const wispR = rr * (0.7 - i * 0.15);
+            if (wispR > 0) {
+                ctx.beginPath();
+                ctx.arc(cxC + Math.sin(i * 2 + trail.t * 0.01) * 3, wispY, wispR, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        ctx.restore();
+    }
+
+    // ── Pop particles ──────────────────────────────────────
+    for (const p of popParticles) {
+        const progress = p.t / p.duration;
+        const alpha = (1 - progress) * p.opacity;
+        const r = p.radius * (1 - progress * 0.5);  // shrink slightly
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+
+        // Glowing particle
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 6;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fill();
+
+        // White core
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ffffff';
+        ctx.globalAlpha = alpha * 0.6;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+    }
+}
+
+function drawCloud(context, col, row, color, pieceKey) {
+    const x = col * CELL;
+    const y = row * CELL;
+    const cx = x + CELL / 2;
+    const cy = y + CELL / 2;
+    const r = CELL / 2 - 1;
+
+    // Get the lighter tint for this piece type
+    const light = (pieceKey && COLORS_LIGHT[pieceKey]) || '#ffffff';
+
+    context.save();
+
+    // Outer glow
+    context.shadowColor = color;
+    context.shadowBlur = 8;
+
+    // Main cloud body — rounded rect with large radius for puffy look
+    const rr = r * 0.6;  // corner radius
+    context.beginPath();
+    context.moveTo(x + 2 + rr, y + 2);
+    context.arcTo(x + CELL - 2, y + 2, x + CELL - 2, y + CELL - 2, rr);
+    context.arcTo(x + CELL - 2, y + CELL - 2, x + 2, y + CELL - 2, rr);
+    context.arcTo(x + 2, y + CELL - 2, x + 2, y + 2, rr);
+    context.arcTo(x + 2, y + 2, x + CELL - 2, y + 2, rr);
+    context.closePath();
+
+    // Cloud gradient fill (lighter on top, color on bottom)
+    const grad = context.createRadialGradient(cx - 3, cy - 4, 2, cx, cy, r);
+    grad.addColorStop(0, light);
+    grad.addColorStop(0.6, color);
+    grad.addColorStop(1, color);
+    context.fillStyle = grad;
+    context.fill();
+
+    context.shadowBlur = 0;
+
+    // Puffy bumps on top (3 small circles)
+    context.fillStyle = light;
+    context.globalAlpha = 0.5;
+    context.beginPath();
+    context.arc(cx - 5, cy - 4, 5, 0, Math.PI * 2);
+    context.fill();
+    context.beginPath();
+    context.arc(cx + 4, cy - 5, 4, 0, Math.PI * 2);
+    context.fill();
+    context.beginPath();
+    context.arc(cx, cy - 7, 4.5, 0, Math.PI * 2);
+    context.fill();
+
+    // Bright highlight dot (cartoon shine)
+    context.globalAlpha = 0.7;
+    context.fillStyle = '#ffffff';
+    context.beginPath();
+    context.arc(cx - 5, cy - 6, 2.5, 0, Math.PI * 2);
+    context.fill();
+
+    context.restore();
+}
+
+// Legacy alias for board cells (no piece key stored — derive from color)
+function drawBlock(context, col, row, color) {
+    // Find the piece key by matching color
+    let key = null;
+    for (const k of PIECE_KEYS) {
+        if (COLORS[k] === color) { key = k; break; }
+    }
+    drawCloud(context, col, row, color, key);
+}
+
+function drawPreview() {
+    previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+    if (!next) return;
+
+    const previewCell = 25;
+    // Centre the piece in the 120×120 preview
+    const rows = next.blocks.map(b => b[0]);
+    const cols = next.blocks.map(b => b[1]);
+    const minR = Math.min(...rows), maxR = Math.max(...rows);
+    const minC = Math.min(...cols), maxC = Math.max(...cols);
+    const h = maxR - minR + 1;
+    const w = maxC - minC + 1;
+    const offsetX = Math.floor((120 - w * previewCell) / 2);
+    const offsetY = Math.floor((120 - h * previewCell) / 2);
+
+    for (const [r, c] of next.blocks) {
+        const px = offsetX + (c - minC) * previewCell;
+        const py = offsetY + (r - minR) * previewCell;
+        const light = COLORS_LIGHT[next.key] || '#ffffff';
+
+        // Mini cloud puff for preview
+        const pcx = px + previewCell / 2;
+        const pcy = py + previewCell / 2;
+        const pr = previewCell / 2 - 1;
+        const prr = pr * 0.55;
+
+        previewCtx.save();
+        previewCtx.shadowColor = next.color;
+        previewCtx.shadowBlur = 4;
+
+        previewCtx.beginPath();
+        previewCtx.moveTo(px + 2 + prr, py + 2);
+        previewCtx.arcTo(px + previewCell - 2, py + 2, px + previewCell - 2, py + previewCell - 2, prr);
+        previewCtx.arcTo(px + previewCell - 2, py + previewCell - 2, px + 2, py + previewCell - 2, prr);
+        previewCtx.arcTo(px + 2, py + previewCell - 2, px + 2, py + 2, prr);
+        previewCtx.arcTo(px + 2, py + 2, px + previewCell - 2, py + 2, prr);
+        previewCtx.closePath();
+
+        const pg = previewCtx.createRadialGradient(pcx - 2, pcy - 3, 1, pcx, pcy, pr);
+        pg.addColorStop(0, light);
+        pg.addColorStop(0.6, next.color);
+        pg.addColorStop(1, next.color);
+        previewCtx.fillStyle = pg;
+        previewCtx.fill();
+
+        previewCtx.shadowBlur = 0;
+        previewCtx.fillStyle = '#ffffff';
+        previewCtx.globalAlpha = 0.55;
+        previewCtx.beginPath();
+        previewCtx.arc(pcx - 3, pcy - 4, 2, 0, Math.PI * 2);
+        previewCtx.fill();
+
+        previewCtx.restore();
+    }
+}
+
+// ── Game loop ──────────────────────────────────────────────
+let lastDrop = 0;
+let lastTime = 0;
+
+function tick(time) {
+    if (!running || over) return;
+
+    const dt = time - lastTime;
+    lastTime = time;
+
+    // Update animations even when game logic is paused
+    updateAnimations(dt);
+
+    // Only advance game logic when not animating
+    if (!animating && time - lastDrop > dropInterval) {
+        floatUp();
+        lastDrop = time;
+    }
+
+    draw();
+    requestAnimationFrame(tick);
+}
+
+function updateAnimations(dt) {
+    // Update float trails
+    for (const trail of floatTrails) {
+        trail.t += dt;
+    }
+    floatTrails = floatTrails.filter(t => t.t < t.duration);
+
+    // Update pop particles
+    for (const p of popParticles) {
+        p.t += dt;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.05;  // gravity
+    }
+    popParticles = popParticles.filter(p => p.t < p.duration);
+
+    // Update row flash
+    if (rowFlash) {
+        rowFlash.t += dt;
+        if (rowFlash.t > rowFlash.duration) {
+            rowFlash = null;
+        }
+    }
+}
+
+// ── Controls ───────────────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+    if (!running || over || !cur) return;
+
+    switch (e.key) {
+        case 'ArrowLeft':  e.preventDefault(); moveH(-1); break;
+        case 'ArrowRight': e.preventDefault(); moveH(1);  break;
+        case 'ArrowUp':
+        case 'z': case 'Z':
+            e.preventDefault(); tryRotate(true); break;
+        case 'ArrowDown':
+        case 'x': case 'X':
+            e.preventDefault(); tryRotate(false); break;
+        case ' ':
+            e.preventDefault(); if (!animating) hardDrop(); break;
+    }
+    draw();
+});
+
+// ── Start / End ────────────────────────────────────────────
+function startGame() {
+    document.getElementById('titleScreen').classList.add('hidden');
+    document.getElementById('gameOverScreen').classList.add('hidden');
+    document.getElementById('gameContainer').style.display = 'block';
+
+    canvas = document.getElementById('gameCanvas');
+    ctx = canvas.getContext('2d');
+    previewCanvas = document.getElementById('previewCanvas');
+    previewCtx = previewCanvas.getContext('2d');
+
+    board = emptyBoard();
+    score = 0; lines = 0; level = 1;
+    dropInterval = 800;
+    running = true; over = false;
+    animating = false;
+    lastDrop = 0;
+    lastTime = 0;
+    next = null;
+    floatTrails = [];
+    popParticles = [];
+    rowFlash = null;
+
+    document.getElementById('score').textContent = '0';
+    document.getElementById('lines').textContent = '0';
+    document.getElementById('level').textContent = '1';
+
+    spawn();
+    draw();
+    requestAnimationFrame(tick);
+}
+
+function endGame() {
+    running = false;
+    over = true;
+    document.getElementById('finalScore').textContent = `Score: ${score}`;
+    document.getElementById('finalLines').textContent = lines;
+    document.getElementById('gameOverScreen').classList.remove('hidden');
+}
+</script>
+</body>
+</html>
