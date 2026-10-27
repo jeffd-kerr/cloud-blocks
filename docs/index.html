@@ -137,8 +137,10 @@
    - Guideline-style scoring: combos, back-to-back Cloudbursts,
      rush and hard-float points
    v2 (Jeff's requests): blocks rendered as puffy little clouds
-   (seeded clusters, so they don't shimmer between frames), and
-   a light chiptune music loop while you play.
+   (seeded clusters, so they don't shimmer between frames).
+   v3 (Jeff's requests): the v2 music loop removed again; the
+   post-clear settle is now animated — remaining blocks float
+   up into place (rendering only; board state stays atomic).
    ============================================================ */
 
 const COLS = 10, ROWS = 20, CELL = 30;
@@ -166,7 +168,8 @@ let board, queue, holdKey, holdUsed, cur;
 let score, lines, level, combo, b2b, gameState; // state: menu | play | pause | over
 let speedFactor = 0.75;
 let riseTimer, lockTimer, lockResets, grounded;
-let particles, popups, flashes, clouds;
+let particles, popups, flashes, clouds, anims;
+let nowSec = 0;   // cosmetic clock for the settle animation
 let muted = false;
 
 const cv = document.getElementById("game"), ctx = cv.getContext("2d");
@@ -195,67 +198,6 @@ const sfx = {
   clear:  n => { [523, 659, 784].slice(0, 2 + n).forEach((f, i) => beep(f, 0.1, "triangle", 0.07, i * 0.06)); },
   burst:  () => { [523, 659, 784, 1047, 1319].forEach((f, i) => beep(f, 0.12, "triangle", 0.08, i * 0.055)); },
   over:   () => { [440, 349, 262, 196].forEach((f, i) => beep(f, 0.22, "sawtooth", 0.05, i * 0.16)); },
-};
-
-// ---------- music: a light chiptune loop (WebAudio sequencer) ----------
-// 8 bars, I–IV–I–V–vi–IV–I–V in C major, 112 BPM eighth-note steps.
-// Bass walks root/fifth, a triangle lead carries the melody, and a
-// quiet square-wave arpeggio sparkles on alternating bars.
-const Music = {
-  playing: false, timer: null, step: 0, nextTime: 0,
-  bpm: 112,
-  roots: [36, 41, 36, 43, 33, 41, 36, 43],          // C2 F2 C2 G2 A1 F2 C2 G2 (MIDI)
-  minor: [false, false, false, false, true, false, false, false],
-  melody: [
-    76, null, 79, null, 84, null, 79, null,   // C
-    81, null, 77, null, 84, null, 81, null,   // F
-    74, null, 76, null, 79, null, 76, null,   // C
-    74, null, 79, null, 83, null, 79, null,   // G
-    81, null, 76, null, 84, null, 83, null,   // Am
-    77, null, 81, null, 84, null, 81, null,   // F
-    76, null, 79, null, 84, null, 88, null,   // C
-    83, null, 86, null, 91, null, 86, null,   // G
-  ],
-  freq(m) { return 440 * Math.pow(2, (m - 69) / 12); },
-  note(m, t, dur, type, vol) {
-    const o = actx.createOscillator(), g = actx.createGain();
-    o.type = type; o.frequency.value = this.freq(m);
-    g.gain.setValueAtTime(vol, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur);
-  },
-  scheduleStep(s, t) {
-    const bar = Math.floor(s / 8), st = s % 8, root = this.roots[bar];
-    if (st % 2 === 0) this.note(root + (st === 2 || st === 6 ? 7 : 0), t, 0.22, "triangle", 0.055); // bass
-    const lead = this.melody[s];
-    if (lead !== null && lead !== undefined) this.note(lead, t, 0.24, "triangle", 0.042);              // melody
-    if (bar % 2 === 1) {                                                                                // sparkle arp
-      const third = this.minor[bar] ? 15 : 16;
-      this.note(root + 24 + [0, third, 7, third][st % 4], t, 0.12, "square", 0.013);
-    }
-  },
-  tick() {
-    const stepDur = 60 / this.bpm / 2;
-    while (this.nextTime < actx.currentTime + 0.18) {
-      this.scheduleStep(this.step, this.nextTime);
-      this.step = (this.step + 1) % 64;
-      this.nextTime += stepDur;
-    }
-  },
-  start() {
-    if (muted || this.playing) return;
-    try {
-      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-      if (actx.state === "suspended") actx.resume();
-    } catch (e) { return; }
-    this.playing = true; this.step = 0;
-    this.nextTime = actx.currentTime + 0.06;
-    this.timer = setInterval(() => this.tick(), 90);
-  },
-  stop() {
-    this.playing = false;
-    if (this.timer) { clearInterval(this.timer); this.timer = null; }
-  },
 };
 
 // ---------- pieces ----------
@@ -411,12 +353,34 @@ function lockPiece() {
 }
 
 // The signature move: every column compacts toward the sky.
+// Board state changes instantly (atomic); the FLOATING is purely
+// visual — each moved block gets a render animation from its old
+// row to its new one, with a slight per-column stagger.
 function settleUp() {
   for (let c = 0; c < COLS; c++) {
-    const stack = [];
-    for (let r = 0; r < ROWS; r++) if (board[r][c]) stack.push(board[r][c]);
-    for (let r = 0; r < ROWS; r++) board[r][c] = stack[r] || null;
+    const entries = [];   // [key, oldRow], top-down
+    for (let r = 0; r < ROWS; r++) if (board[r][c]) entries.push([board[r][c], r]);
+    for (let r = 0; r < ROWS; r++) board[r][c] = entries[r] ? entries[r][0] : null;
+    entries.forEach(([, oldRow], newRow) => {
+      if (newRow !== oldRow) {
+        const from = visualRow(oldRow, c);  // mid-flight from a previous settle? start there
+        const dist = oldRow - newRow;
+        anims.set(c + "," + newRow, {
+          from, start: nowSec + c * 0.018,
+          dur: Math.min(0.7, 0.3 + dist * 0.035),
+        });
+      }
+    });
   }
+}
+function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+function visualRow(r, c) {
+  const a = anims.get(c + "," + r);
+  if (!a) return r;
+  const k = (nowSec - a.start) / a.dur;
+  if (k <= 0) return a.from;
+  if (k >= 1) return r;
+  return a.from + (r - a.from) * easeOutCubic(k);
 }
 
 // ---------- effects ----------
@@ -447,6 +411,8 @@ let dasTimer = 0, arrTimer = 0, dasDir = 0;
 
 function update(dt) {
   // ambient effects always animate
+  nowSec += dt;
+  for (const [k, a] of anims) if (nowSec - a.start > a.dur) anims.delete(k);
   for (const cl of clouds) { cl.x += cl.v * dt; if (cl.x - 60 * cl.s > 320) cl.x = -60 * cl.s; }
   particles = particles.filter(p => (p.life += dt) < p.ttl);
   for (const p of particles) { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 160 * dt; }
@@ -504,12 +470,13 @@ function puffCluster(c2, cx, cy, s, style) {
   for (const [ox, oy, r] of puffs) { c2.moveTo(cx + (ox + r) * s, cy + oy * s); c2.arc(cx + ox * s, cy + oy * s, r * s, 0, Math.PI * 2); }
   c2.fill();
 }
-function drawCell(x, y, key, alpha = 1, ghost = false) {
+function drawCell(x, y, key, alpha = 1, ghost = false, hashY = null) {
   const [fill, light] = COLORS[key];
   const px = x * CELL, py = y * CELL, cx = px + CELL / 2, cy = py + CELL / 2;
-  const j = cellHash(x, y, key);                       // 0..1 stable per block
+  const hy = hashY === null ? Math.round(y) : hashY;   // puff shape follows the logical row, not the animated one
+  const j = cellHash(x, hy, key);                       // 0..1 stable per block
   const s = (CELL / 30) * (0.94 + j * 0.1);            // slight size variety
-  const dx = (j - 0.5) * 2.2, dy = (cellHash(y, x, key) - 0.5) * 2.2;
+  const dx = (j - 0.5) * 2.2, dy = (cellHash(hy, x, key) - 0.5) * 2.2;
   ctx.save();
   ctx.globalAlpha = alpha;
   if (ghost) {
@@ -586,7 +553,7 @@ function render() {
   ctx.fillRect(0, 600 - 5, 300, 5);
 
   for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++)
-    if (board[r][c]) drawCell(c, r, board[r][c]);
+    if (board[r][c]) drawCell(c, visualRow(r, c), board[r][c], 1, false, r);
 
   // line-clear flash
   for (const f of flashes) {
@@ -621,18 +588,16 @@ function reset(factor) {
   board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
   queue = []; holdKey = null; holdUsed = false;
   score = 0; lines = 0; level = 1; combo = -1; b2b = false;
-  particles = []; popups = []; flashes = [];
+  particles = []; popups = []; flashes = []; anims = new Map();
   gameState = "play";
   document.getElementById("startScreen").classList.add("hidden");
   document.getElementById("overScreen").classList.add("hidden");
   document.getElementById("pauseScreen").classList.add("hidden");
   spawn();
   updateStats();
-  Music.start();
 }
 function endGame() {
   gameState = "over";
-  Music.stop();
   sfx.over();
   document.getElementById("finalStats").innerHTML =
     `Score <b>${score}</b> &nbsp;·&nbsp; Lines <b>${lines}</b> &nbsp;·&nbsp; Level <b>${level}</b>`;
@@ -643,7 +608,6 @@ function togglePause(force) {
   const toPause = force !== undefined ? force : gameState === "play";
   gameState = toPause ? "pause" : "play";
   document.getElementById("pauseScreen").classList.toggle("hidden", !toPause);
-  if (toPause) Music.stop(); else Music.start();
 }
 
 // ---------- input ----------
@@ -697,14 +661,12 @@ document.getElementById("pauseBtn").addEventListener("click", () => togglePause(
 function toggleMute() {
   muted = !muted;
   document.getElementById("muteBtn").textContent = muted ? "Sound: off" : "Sound: on";
-  if (muted) Music.stop();
-  else if (gameState === "play") Music.start();
 }
 document.getElementById("muteBtn").addEventListener("click", toggleMute);
 
 // ---------- main loop: one rAF loop drives logic + effects ----------
 board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
-queue = []; particles = []; popups = []; flashes = [];
+queue = []; particles = []; popups = []; flashes = []; anims = new Map();
 score = 0; lines = 0; level = 1; combo = -1; b2b = false; gameState = "menu";
 initClouds();
 let last = performance.now();
