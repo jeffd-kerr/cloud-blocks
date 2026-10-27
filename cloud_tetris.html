@@ -136,6 +136,9 @@
      are atomic, so no timer races; animation is cosmetic only
    - Guideline-style scoring: combos, back-to-back Cloudbursts,
      rush and hard-float points
+   v2 (Jeff's requests): blocks rendered as puffy little clouds
+   (seeded clusters, so they don't shimmer between frames), and
+   a light chiptune music loop while you play.
    ============================================================ */
 
 const COLS = 10, ROWS = 20, CELL = 30;
@@ -192,6 +195,67 @@ const sfx = {
   clear:  n => { [523, 659, 784].slice(0, 2 + n).forEach((f, i) => beep(f, 0.1, "triangle", 0.07, i * 0.06)); },
   burst:  () => { [523, 659, 784, 1047, 1319].forEach((f, i) => beep(f, 0.12, "triangle", 0.08, i * 0.055)); },
   over:   () => { [440, 349, 262, 196].forEach((f, i) => beep(f, 0.22, "sawtooth", 0.05, i * 0.16)); },
+};
+
+// ---------- music: a light chiptune loop (WebAudio sequencer) ----------
+// 8 bars, I–IV–I–V–vi–IV–I–V in C major, 112 BPM eighth-note steps.
+// Bass walks root/fifth, a triangle lead carries the melody, and a
+// quiet square-wave arpeggio sparkles on alternating bars.
+const Music = {
+  playing: false, timer: null, step: 0, nextTime: 0,
+  bpm: 112,
+  roots: [36, 41, 36, 43, 33, 41, 36, 43],          // C2 F2 C2 G2 A1 F2 C2 G2 (MIDI)
+  minor: [false, false, false, false, true, false, false, false],
+  melody: [
+    76, null, 79, null, 84, null, 79, null,   // C
+    81, null, 77, null, 84, null, 81, null,   // F
+    74, null, 76, null, 79, null, 76, null,   // C
+    74, null, 79, null, 83, null, 79, null,   // G
+    81, null, 76, null, 84, null, 83, null,   // Am
+    77, null, 81, null, 84, null, 81, null,   // F
+    76, null, 79, null, 84, null, 88, null,   // C
+    83, null, 86, null, 91, null, 86, null,   // G
+  ],
+  freq(m) { return 440 * Math.pow(2, (m - 69) / 12); },
+  note(m, t, dur, type, vol) {
+    const o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.value = this.freq(m);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur);
+  },
+  scheduleStep(s, t) {
+    const bar = Math.floor(s / 8), st = s % 8, root = this.roots[bar];
+    if (st % 2 === 0) this.note(root + (st === 2 || st === 6 ? 7 : 0), t, 0.22, "triangle", 0.055); // bass
+    const lead = this.melody[s];
+    if (lead !== null && lead !== undefined) this.note(lead, t, 0.24, "triangle", 0.042);              // melody
+    if (bar % 2 === 1) {                                                                                // sparkle arp
+      const third = this.minor[bar] ? 15 : 16;
+      this.note(root + 24 + [0, third, 7, third][st % 4], t, 0.12, "square", 0.013);
+    }
+  },
+  tick() {
+    const stepDur = 60 / this.bpm / 2;
+    while (this.nextTime < actx.currentTime + 0.18) {
+      this.scheduleStep(this.step, this.nextTime);
+      this.step = (this.step + 1) % 64;
+      this.nextTime += stepDur;
+    }
+  },
+  start() {
+    if (muted || this.playing) return;
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === "suspended") actx.resume();
+    } catch (e) { return; }
+    this.playing = true; this.step = 0;
+    this.nextTime = actx.currentTime + 0.06;
+    this.timer = setInterval(() => this.tick(), 90);
+  },
+  stop() {
+    this.playing = false;
+    if (this.timer) { clearInterval(this.timer); this.timer = null; }
+  },
 };
 
 // ---------- pieces ----------
@@ -424,25 +488,45 @@ function update(dt) {
 }
 
 // ---------- render ----------
+// Deterministic per-cell jitter — a block's puffs must sit still
+// between frames, so the "randomness" is hashed from its position.
+function cellHash(x, y, key) {
+  let h = Math.sin(x * 127.1 + y * 311.7 + key.charCodeAt(0) * 74.7) * 43758.5453;
+  return h - Math.floor(h);
+}
+// One puffy little cloud per block: overlapping circles filled with a
+// single shared gradient read as one soft mass; a slightly larger,
+// darker pass underneath gives the rim. No strokes (they'd show seams).
+function puffCluster(c2, cx, cy, s, style) {
+  const puffs = [[0, 1.5, 12.6], [-8.6, 4.4, 8.8], [8.8, 3.8, 9.6], [-3.4, -4.6, 8.2], [5.2, -5.2, 7.4]];
+  c2.fillStyle = style;
+  c2.beginPath();
+  for (const [ox, oy, r] of puffs) { c2.moveTo(cx + (ox + r) * s, cy + oy * s); c2.arc(cx + ox * s, cy + oy * s, r * s, 0, Math.PI * 2); }
+  c2.fill();
+}
 function drawCell(x, y, key, alpha = 1, ghost = false) {
   const [fill, light] = COLORS[key];
-  const px = x * CELL, py = y * CELL;
+  const px = x * CELL, py = y * CELL, cx = px + CELL / 2, cy = py + CELL / 2;
+  const j = cellHash(x, y, key);                       // 0..1 stable per block
+  const s = (CELL / 30) * (0.94 + j * 0.1);            // slight size variety
+  const dx = (j - 0.5) * 2.2, dy = (cellHash(y, x, key) - 0.5) * 2.2;
   ctx.save();
   ctx.globalAlpha = alpha;
-  const g = ctx.createLinearGradient(px, py, px, py + CELL);
-  if (ghost) { g.addColorStop(0, "rgba(255,255,255,0.05)"); g.addColorStop(1, "rgba(255,255,255,0.05)"); }
-  else { g.addColorStop(0, light); g.addColorStop(0.25, fill); g.addColorStop(1, fill); }
-  ctx.fillStyle = g;
-  ctx.strokeStyle = ghost ? fill : "rgba(255,255,255,.55)";
-  ctx.lineWidth = ghost ? 1.5 : 1;
-  const r = 8, inset = 1.5;
-  ctx.beginPath();
-  ctx.roundRect(px + inset, py + inset, CELL - inset * 2, CELL - inset * 2, r);
-  ctx.fill(); ctx.stroke();
-  if (!ghost) { // puff highlight
-    ctx.fillStyle = "rgba(255,255,255,.35)";
-    ctx.beginPath(); ctx.ellipse(px + 11, py + 9, 6, 3.6, -0.5, 0, Math.PI * 2); ctx.fill();
+  if (ghost) {
+    ctx.strokeStyle = fill; ctx.lineWidth = 1.4;
+    const puffs = [[0, 1.5, 12.6], [-8.6, 4.4, 8.8], [8.8, 3.8, 9.6], [-3.4, -4.6, 8.2], [5.2, -5.2, 7.4]];
+    ctx.beginPath();
+    for (const [ox, oy, r] of puffs) { ctx.moveTo(cx + dx + (ox + r) * s, cy + dy + oy * s); ctx.arc(cx + dx + ox * s, cy + dy + oy * s, r * s, 0, Math.PI * 2); }
+    ctx.stroke();
+    ctx.restore();
+    return;
   }
+  const g = ctx.createLinearGradient(px, py - 4, px, py + CELL + 2);
+  g.addColorStop(0, light); g.addColorStop(0.55, fill); g.addColorStop(1, fill);
+  puffCluster(ctx, cx + dx, cy + dy + 1.6, s * 1.05, "rgba(70,90,140,.45)");  // soft rim/shadow pass
+  puffCluster(ctx, cx + dx, cy + dy, s, g);                                    // body
+  ctx.fillStyle = "rgba(255,255,255,.5)";                                    // sunlit top
+  ctx.beginPath(); ctx.ellipse(cx + dx - 4, cy + dy - 6.5, 5.6, 2.9, -0.45, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }
 function drawMini(c2, key, dim) {
@@ -456,10 +540,11 @@ function drawMini(c2, key, dim) {
   const ox = (c2.width - w) / 2, oy = (c2.height - h) / 2;
   const [fill, light] = COLORS[key];
   for (const [r, c] of cells) {
-    const grad = g.createLinearGradient(0, oy + (r - minR) * s, 0, oy + (r - minR + 1) * s);
+    const cxm = ox + (c - minC) * s + s / 2, cym = oy + (r - minR) * s + s / 2;
+    const grad = g.createLinearGradient(0, cym - s / 2, 0, cym + s / 2);
     grad.addColorStop(0, light); grad.addColorStop(1, fill);
-    g.fillStyle = grad; g.globalAlpha = dim ? 0.35 : 1;
-    g.beginPath(); g.roundRect(ox + (c - minC) * s + 1, oy + (r - minR) * s + 1, s - 2, s - 2, 4); g.fill();
+    g.globalAlpha = dim ? 0.35 : 1;
+    puffCluster(g, cxm, cym, s / 30, grad);   // mini cloud, same recipe as the board
   }
   g.globalAlpha = 1;
 }
@@ -543,9 +628,11 @@ function reset(factor) {
   document.getElementById("pauseScreen").classList.add("hidden");
   spawn();
   updateStats();
+  Music.start();
 }
 function endGame() {
   gameState = "over";
+  Music.stop();
   sfx.over();
   document.getElementById("finalStats").innerHTML =
     `Score <b>${score}</b> &nbsp;·&nbsp; Lines <b>${lines}</b> &nbsp;·&nbsp; Level <b>${level}</b>`;
@@ -556,6 +643,7 @@ function togglePause(force) {
   const toPause = force !== undefined ? force : gameState === "play";
   gameState = toPause ? "pause" : "play";
   document.getElementById("pauseScreen").classList.toggle("hidden", !toPause);
+  if (toPause) Music.stop(); else Music.start();
 }
 
 // ---------- input ----------
@@ -609,6 +697,8 @@ document.getElementById("pauseBtn").addEventListener("click", () => togglePause(
 function toggleMute() {
   muted = !muted;
   document.getElementById("muteBtn").textContent = muted ? "Sound: off" : "Sound: on";
+  if (muted) Music.stop();
+  else if (gameState === "play") Music.start();
 }
 document.getElementById("muteBtn").addEventListener("click", toggleMute);
 
