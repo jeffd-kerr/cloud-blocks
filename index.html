@@ -141,6 +141,8 @@
    v3 (Jeff's requests): the v2 music loop removed again; the
    post-clear settle is now animated — remaining blocks float
    up into place (rendering only; board state stays atomic).
+   v4 (Jeff's request): the hard float is animated the same
+   way — the piece glides up to its landing spot, then locks.
    ============================================================ */
 
 const COLS = 10, ROWS = 20, CELL = 30;
@@ -170,6 +172,7 @@ let speedFactor = 0.75;
 let riseTimer, lockTimer, lockResets, grounded;
 let particles, popups, flashes, clouds, anims;
 let nowSec = 0;   // cosmetic clock for the settle animation
+let floatAnim = null;   // in-flight hard float: {from, to, t, dur}
 let muted = false;
 
 const cv = document.getElementById("game"), ctx = cv.getContext("2d");
@@ -251,9 +254,18 @@ function ghostY() {
   while (!collides(cur, cur.m, cur.x, gy - 1)) gy--;
   return gy;
 }
+// Where the active piece is drawn: its logical row, or mid-glide
+// while a hard-float animation is running.
+function pieceY() {
+  if (!cur) return 0;
+  if (!floatAnim) return cur.y;
+  const k = Math.min(1, floatAnim.t / floatAnim.dur);
+  return floatAnim.from + (floatAnim.to - floatAnim.from) * easeOutCubic(k);
+}
 
 // ---------- actions ----------
 function tryMove(dx) {
+  if (floatAnim) return false;
   if (!collides(cur, cur.m, cur.x + dx, cur.y)) {
     cur.x += dx;
     if (grounded) resetLock();
@@ -271,6 +283,7 @@ function rotateMatrix(m, cw) {
   return out;
 }
 function tryRotate(cw) {
+  if (floatAnim) return;
   if (cur.key === "O") return;                       // spinning a square is a no-op
   const nm = rotateMatrix(cur.m, cw);
   const kicks = [[0,0],[-1,0],[1,0],[-2,0],[2,0],[0,1],[0,-1],[-1,1],[1,1]];
@@ -287,19 +300,21 @@ function resetLock() {
   if (lockResets < MAX_LOCK_RESETS) { lockTimer = 0; lockResets++; }
 }
 function hardFloat() {
+  if (floatAnim) return;
   const gy = ghostY();
   const dist = cur.y - gy;
-  if (dist > 0) {
-    score += dist * 2;
-    for (const [r, c] of filledCells(cur.m))
-      spawnTrail(cur.x + c, cur.y + r, gy + r, cur.key);
-    cur.y = gy;
-    beep(300, 0.16, "sine", 0.06, 0, 900);
-  }
-  lockPiece();
+  if (dist <= 0) { lockPiece(); return; }
+  score += dist * 2;
+  for (const [r, c] of filledCells(cur.m))
+    spawnTrail(cur.x + c, cur.y + r, gy + r, cur.key);
+  beep(300, 0.16, "sine", 0.06, 0, 900);
+  // Glide up instead of teleporting; the piece locks on arrival
+  // (handled in update). Same ease as the settle animation.
+  floatAnim = { from: cur.y, to: gy, t: 0, dur: Math.min(0.6, 0.2 + dist * 0.03) };
+  updateStats();
 }
 function hold() {
-  if (holdUsed || gameState !== "play") return;
+  if (holdUsed || gameState !== "play" || floatAnim) return;
   const oldKey = cur.key;
   if (holdKey) {
     const k = holdKey; holdKey = oldKey;
@@ -411,7 +426,7 @@ let dasTimer = 0, arrTimer = 0, dasDir = 0;
 
 function update(dt) {
   // ambient effects always animate
-  nowSec += dt;
+  if (gameState !== "pause") nowSec += dt;
   for (const [k, a] of anims) if (nowSec - a.start > a.dur) anims.delete(k);
   for (const cl of clouds) { cl.x += cl.v * dt; if (cl.x - 60 * cl.s > 320) cl.x = -60 * cl.s; }
   particles = particles.filter(p => (p.life += dt) < p.ttl);
@@ -419,6 +434,18 @@ function update(dt) {
   popups = popups.filter(p => (p.t += dt) < 1.1);
   flashes = flashes.filter(f => (f.t += dt) < 0.22);
   if (gameState !== "play" || !cur) return;
+
+  // hard-float glide: advance it, lock on arrival, nothing else moves
+  if (floatAnim) {
+    floatAnim.t += dt;
+    if (floatAnim.t >= floatAnim.dur) {
+      cur.y = floatAnim.to;
+      floatAnim = null;
+      lockPiece();
+    }
+    updateStats();
+    return;
+  }
 
   // sideways auto-repeat (DAS / ARR)
   const dir = held.left ? -1 : held.right ? 1 : 0;
@@ -561,9 +588,12 @@ function render() {
     for (const r of f.rows) ctx.fillRect(0, r * CELL, 300, CELL);
   }
   if (cur && gameState !== "over") {
-    const gy = ghostY();
-    if (gy !== cur.y) for (const [r, c] of filledCells(cur.m)) drawCell(cur.x + c, gy + r, cur.key, 0.5, true);
-    for (const [r, c] of filledCells(cur.m)) drawCell(cur.x + c, cur.y + r, cur.key);
+    const py = pieceY();
+    if (!floatAnim) {
+      const gy = ghostY();
+      if (gy !== cur.y) for (const [r, c] of filledCells(cur.m)) drawCell(cur.x + c, gy + r, cur.key, 0.5, true);
+    }
+    for (const [r, c] of filledCells(cur.m)) drawCell(cur.x + c, py + r, cur.key, 1, false, cur.y + r);
   }
   // particles
   for (const p of particles) {
@@ -588,7 +618,7 @@ function reset(factor) {
   board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
   queue = []; holdKey = null; holdUsed = false;
   score = 0; lines = 0; level = 1; combo = -1; b2b = false;
-  particles = []; popups = []; flashes = []; anims = new Map();
+  particles = []; popups = []; flashes = []; anims = new Map(); floatAnim = null;
   gameState = "play";
   document.getElementById("startScreen").classList.add("hidden");
   document.getElementById("overScreen").classList.add("hidden");
