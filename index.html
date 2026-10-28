@@ -145,6 +145,11 @@
    way — the piece glides up to its landing spot, then locks.
    v5 (Jeff's request): the lock "click" is now a soft puff —
    a filtered noise burst with a faint low body underneath.
+   v6 (Jeff found a bug + a request): rows completed BY the
+   settle now clear too, as a chain (steps resolve with a beat
+   between them so the float reads); and the puff is pitched
+   by lock height — top of the board lower and quieter, the
+   further down the higher and louder.
    ============================================================ */
 
 const COLS = 10, ROWS = 20, CELL = 30;
@@ -198,7 +203,9 @@ function beep(freq, dur, type, vol, when = 0, slideTo = null) {
 const sfx = {
   rotate: () => beep(320, 0.05, "square", 0.03),
   hold:   () => { beep(500, 0.06, "sine", 0.06); beep(750, 0.07, "sine", 0.06, 0.05); },
-  lock:   () => { // a soft puff of air, not a click: filtered noise burst + faint body
+  // A soft puff of air, pitched by lock height: frac is 0 at the sky
+  // (row 0 — lower and quieter) to 1 at the ground (higher, louder).
+  lock:   (frac = 0.5) => {
     if (muted) return;
     try {
       actx = actx || new (window.AudioContext || window.webkitAudioContext)();
@@ -208,14 +215,14 @@ const sfx = {
       for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
       const src = actx.createBufferSource(); src.buffer = buf;
       const filt = actx.createBiquadFilter(); filt.type = "lowpass";
-      filt.frequency.setValueAtTime(950, t0);
-      filt.frequency.exponentialRampToValueAtTime(220, t0 + dur);
+      filt.frequency.setValueAtTime(500 + frac * 1000, t0);
+      filt.frequency.exponentialRampToValueAtTime(180 + frac * 320, t0 + dur);
       const g = actx.createGain();
-      g.gain.setValueAtTime(0.17, t0);
+      g.gain.setValueAtTime(0.06 + frac * 0.15, t0);
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
       src.connect(filt).connect(g).connect(actx.destination);
       src.start(t0);
-      beep(105, 0.11, "sine", 0.045, 0, 62);
+      beep(68 + frac * 84, 0.11, "sine", 0.018 + frac * 0.042, 0, 50 + frac * 60);
     } catch (e) { /* audio is decoration */ }
   },
   rush:   () => beep(220, 0.03, "triangle", 0.02),
@@ -286,7 +293,7 @@ function pieceY() {
 
 // ---------- actions ----------
 function tryMove(dx) {
-  if (floatAnim) return false;
+  if (!cur || floatAnim) return false;
   if (!collides(cur, cur.m, cur.x + dx, cur.y)) {
     cur.x += dx;
     if (grounded) resetLock();
@@ -304,7 +311,7 @@ function rotateMatrix(m, cw) {
   return out;
 }
 function tryRotate(cw) {
-  if (floatAnim) return;
+  if (!cur || floatAnim) return;
   if (cur.key === "O") return;                       // spinning a square is a no-op
   const nm = rotateMatrix(cur.m, cw);
   const kicks = [[0,0],[-1,0],[1,0],[-2,0],[2,0],[0,1],[0,-1],[-1,1],[1,1]];
@@ -321,7 +328,7 @@ function resetLock() {
   if (lockResets < MAX_LOCK_RESETS) { lockTimer = 0; lockResets++; }
 }
 function hardFloat() {
-  if (floatAnim) return;
+  if (!cur || floatAnim) return;
   const gy = ghostY();
   const dist = cur.y - gy;
   if (dist <= 0) { lockPiece(); return; }
@@ -335,7 +342,7 @@ function hardFloat() {
   updateStats();
 }
 function hold() {
-  if (holdUsed || gameState !== "play" || floatAnim) return;
+  if (holdUsed || gameState !== "play" || floatAnim || !cur) return;
   const oldKey = cur.key;
   if (holdKey) {
     const k = holdKey; holdKey = oldKey;
@@ -352,40 +359,61 @@ function hold() {
   drawSide();
 }
 // ---------- lock, clear, settle ----------
-function lockPiece() {
-  for (const [r, c] of filledCells(cur.m)) board[cur.y + r][cur.x + c] = cur.key;
-  sfx.lock();
-  holdUsed = false;
+// Cascade state: after a lock, clears resolve in steps — the
+// upward settle can complete NEW full rows, which then clear in
+// turn (with a short beat between steps so the float is visible).
+// The next piece spawns only when a step finds no full rows.
+let resolving = false, resolveTimer = 0, chain = 0, lockAgg = null;
 
+function lockPiece() {
+  const cells = filledCells(cur.m);
+  const topRow = Math.min(...cells.map(([r]) => cur.y + r));
+  for (const [r, c] of cells) board[cur.y + r][cur.x + c] = cur.key;
+  sfx.lock(topRow / (ROWS - 1));   // puff pitch/volume follow the lock height
+  holdUsed = false;
+  cur = null;
+  chain = 0;
+  lockAgg = { lines: 0, burst: false, b2bBefore: b2b };
+  resolving = true;
+  runClearStep();
+}
+
+function runClearStep() {
   const full = [];
   for (let r = 0; r < ROWS; r++) if (board[r].every(v => v)) full.push(r);
 
-  if (full.length) {
-    // cosmetic effects use pre-clear positions; board updates are atomic
-    for (const r of full) for (let c = 0; c < COLS; c++) spawnPop(c, r, board[r][c]);
-    flashes.push({ rows: full, t: 0 });
-
-    const isBurst = full.length === 4;
-    let pts = BASE_POINTS[full.length] * level;
-    if (isBurst && b2b) pts = Math.floor(pts * 1.5);
-    if (isBurst) b2b = true; else if (full.length > 0) b2b = false;
-    combo++;
-    if (combo > 0) pts += 50 * combo * level;
-    score += pts;
-    lines += full.length;
-    level = 1 + Math.floor(lines / 10);
-
-    popups.push({ x: 150, y: full[0] * CELL, text: "+" + pts, t: 0 });
-    if (isBurst) popups.push({ x: 150, y: (full[0] + 1) * CELL, text: b2b && pts > 3200 ? "B2B CLOUDBURST!" : "CLOUDBURST!", t: 0 });
-    isBurst ? sfx.burst() : sfx.clear(full.length);
-
-    for (const r of full) board[r] = Array(COLS).fill(null);
-    settleUp();
-  } else {
-    combo = -1;
+  if (!full.length) {            // cascade exhausted — next piece
+    resolving = false;
+    if (lockAgg.lines === 0) combo = -1;
+    else b2b = lockAgg.burst;
+    updateStats();
+    spawn();
+    return;
   }
+
+  chain++;
+  // cosmetic effects use pre-clear positions; board updates are atomic
+  for (const r of full) for (let c = 0; c < COLS; c++) spawnPop(c, r, board[r][c]);
+  flashes.push({ rows: full, t: 0 });
+
+  const n = full.length, isBurst = n === 4;
+  let pts = BASE_POINTS[n] * level * chain;
+  if (isBurst && lockAgg.b2bBefore) pts = Math.floor(pts * 1.5);
+  if (isBurst) lockAgg.burst = true;
+  if (chain === 1) { combo++; if (combo > 0) pts += 50 * combo * level; }
+  score += pts;
+  lines += n; lockAgg.lines += n;
+  level = 1 + Math.floor(lines / 10);
+
+  popups.push({ x: 150, y: full[0] * CELL, text: "+" + pts, t: 0 });
+  if (isBurst) popups.push({ x: 150, y: (full[0] + 1) * CELL, text: lockAgg.b2bBefore ? "B2B CLOUDBURST!" : "CLOUDBURST!", t: 0 });
+  if (chain > 1) popups.push({ x: 150, y: (full[0] + 1) * CELL, text: "CHAIN \u00d7" + chain + "!", t: 0 });
+  isBurst ? sfx.burst() : sfx.clear(n);
+
+  for (const r of full) board[r] = Array(COLS).fill(null);
+  settleUp();
   updateStats();
-  spawn();
+  resolveTimer = 0.55;   // a beat for the float, then check for chain clears
 }
 
 // The signature move: every column compacts toward the sky.
@@ -454,6 +482,10 @@ function update(dt) {
   for (const p of particles) { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 160 * dt; }
   popups = popups.filter(p => (p.t += dt) < 1.1);
   flashes = flashes.filter(f => (f.t += dt) < 0.22);
+  if (gameState === "play" && resolving) {   // cascade beat between clear steps
+    resolveTimer -= dt;
+    if (resolveTimer <= 0) runClearStep();
+  }
   if (gameState !== "play" || !cur) return;
 
   // hard-float glide: advance it, lock on arrival, nothing else moves
@@ -639,7 +671,7 @@ function reset(factor) {
   board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
   queue = []; holdKey = null; holdUsed = false;
   score = 0; lines = 0; level = 1; combo = -1; b2b = false;
-  particles = []; popups = []; flashes = []; anims = new Map(); floatAnim = null;
+  particles = []; popups = []; flashes = []; anims = new Map(); floatAnim = null; resolving = false; resolveTimer = 0; chain = 0;
   gameState = "play";
   document.getElementById("startScreen").classList.add("hidden");
   document.getElementById("overScreen").classList.add("hidden");
