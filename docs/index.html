@@ -143,6 +143,8 @@
    up into place (rendering only; board state stays atomic).
    v4 (Jeff's request): the hard float is animated the same
    way — the piece glides up to its landing spot, then locks.
+   v5 (Jeff's request): the lock "click" is now a soft puff —
+   a filtered noise burst with a faint low body underneath.
    ============================================================ */
 
 const COLS = 10, ROWS = 20, CELL = 30;
@@ -196,7 +198,26 @@ function beep(freq, dur, type, vol, when = 0, slideTo = null) {
 const sfx = {
   rotate: () => beep(320, 0.05, "square", 0.03),
   hold:   () => { beep(500, 0.06, "sine", 0.06); beep(750, 0.07, "sine", 0.06, 0.05); },
-  lock:   () => beep(130, 0.09, "sine", 0.12, 0, 70),
+  lock:   () => { // a soft puff of air, not a click: filtered noise burst + faint body
+    if (muted) return;
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      const t0 = actx.currentTime, dur = 0.15;
+      const buf = actx.createBuffer(1, Math.floor(actx.sampleRate * dur), actx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+      const src = actx.createBufferSource(); src.buffer = buf;
+      const filt = actx.createBiquadFilter(); filt.type = "lowpass";
+      filt.frequency.setValueAtTime(950, t0);
+      filt.frequency.exponentialRampToValueAtTime(220, t0 + dur);
+      const g = actx.createGain();
+      g.gain.setValueAtTime(0.17, t0);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      src.connect(filt).connect(g).connect(actx.destination);
+      src.start(t0);
+      beep(105, 0.11, "sine", 0.045, 0, 62);
+    } catch (e) { /* audio is decoration */ }
+  },
   rush:   () => beep(220, 0.03, "triangle", 0.02),
   clear:  n => { [523, 659, 784].slice(0, 2 + n).forEach((f, i) => beep(f, 0.1, "triangle", 0.07, i * 0.06)); },
   burst:  () => { [523, 659, 784, 1047, 1319].forEach((f, i) => beep(f, 0.12, "triangle", 0.08, i * 0.055)); },
