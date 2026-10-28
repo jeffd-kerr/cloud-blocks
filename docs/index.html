@@ -150,6 +150,10 @@
    between them so the float reads); and the puff is pitched
    by lock height — top of the board lower and quieter, the
    further down the higher and louder.
+   v7 (Jeff found a bug): a long game ended with score NaN —
+   a cascade step cleared 5 rows at once and the scoring
+   table only covered 0–4. clearPoints() scales past 4 now,
+   and a non-finite step score can never poison the total.
    ============================================================ */
 
 const COLS = 10, ROWS = 20, CELL = 30;
@@ -170,6 +174,11 @@ const COLORS = {  // [fill, light edge]
 };
 const KEYS = Object.keys(SHAPES);
 const BASE_POINTS = [0, 100, 300, 500, 800];
+// A piece touches at most 4 rows, but the upward settle can complete
+// more than that in one cascade step (bounded by the shortest column,
+// not by the piece). Jeff hit this in a long game: BASE_POINTS[5]
+// was undefined and the score went NaN. Rows past 4 keep scaling.
+function clearPoints(n) { return n <= 4 ? BASE_POINTS[n] : 800 + 400 * (n - 4); }
 const LOCK_DELAY = 500, MAX_LOCK_RESETS = 15;
 
 // ---------- state ----------
@@ -396,17 +405,18 @@ function runClearStep() {
   for (const r of full) for (let c = 0; c < COLS; c++) spawnPop(c, r, board[r][c]);
   flashes.push({ rows: full, t: 0 });
 
-  const n = full.length, isBurst = n === 4;
-  let pts = BASE_POINTS[n] * level * chain;
+  const n = full.length, isBurst = n >= 4;
+  let pts = clearPoints(n) * level * chain;
   if (isBurst && lockAgg.b2bBefore) pts = Math.floor(pts * 1.5);
   if (isBurst) lockAgg.burst = true;
   if (chain === 1) { combo++; if (combo > 0) pts += 50 * combo * level; }
+  if (!Number.isFinite(pts)) pts = 0;   // a scoring surprise must never poison the total
   score += pts;
   lines += n; lockAgg.lines += n;
   level = 1 + Math.floor(lines / 10);
 
   popups.push({ x: 150, y: full[0] * CELL, text: "+" + pts, t: 0 });
-  if (isBurst) popups.push({ x: 150, y: (full[0] + 1) * CELL, text: lockAgg.b2bBefore ? "B2B CLOUDBURST!" : "CLOUDBURST!", t: 0 });
+  if (isBurst) popups.push({ x: 150, y: (full[0] + 1) * CELL, text: lockAgg.b2bBefore ? "B2B CLOUDBURST!" : (n > 4 ? "CLOUDBURST ×" + n + "!" : "CLOUDBURST!"), t: 0 });
   if (chain > 1) popups.push({ x: 150, y: (full[0] + 1) * CELL, text: "CHAIN \u00d7" + chain + "!", t: 0 });
   isBurst ? sfx.burst() : sfx.clear(n);
 
